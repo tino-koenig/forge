@@ -51,3 +51,14 @@ def read_text_file(path: Path, session: ExecutionSession) -> str | None:
         return path.read_text(encoding="utf-8")
     except (UnicodeDecodeError, OSError):
         return None
+
+
+def write_forge_file(root: Path, relative_path: str, content: str, session: ExecutionSession) -> Path:
+    """Write content under .forge/ only, enforcing forge_write effect."""
+    session.record_effect(EffectClass.FORGE_WRITE, f"write .forge/{relative_path}")
+    forge_root = root / ".forge"
+    target = forge_root / relative_path
+    forge_root.mkdir(parents=True, exist_ok=True)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+    return target

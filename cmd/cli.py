@@ -9,6 +9,7 @@ from core.runtime import execute
 
 
 REQUIRES_PAYLOAD = {
+    "index": False,
     "query": True,
     "explain": True,
     "review": True,
@@ -24,6 +25,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Repository root to analyze (default: current directory)",
     )
     subparsers = parser.add_subparsers(dest="capability", required=True)
+
+    index_parser = subparsers.add_parser("index", help="Build or refresh repository index")
+    index_parser.add_argument(
+        "parts",
+        nargs="*",
+        help="Optional operation/profile prefix: simple|standard|detailed",
+    )
 
     query_parser = subparsers.add_parser("query", help="Run query capability")
     query_parser.add_argument(
