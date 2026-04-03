@@ -23,6 +23,7 @@ class ResolvedLLMConfig:
     context_budget_tokens: int
     max_output_tokens: int
     temperature: float
+    output_language: str
     prompt_profile: str
     system_template_path: Path
     query_planner_enabled: bool
@@ -102,6 +103,30 @@ def _default_system_template() -> Path:
     return Path(__file__).resolve().parents[1] / "prompts" / "system" / "default_read_only.txt"
 
 
+def _normalize_output_language(value: Any) -> str:
+    if value is None:
+        return "auto"
+    candidate = str(value).strip()
+    if not candidate:
+        return "auto"
+    lowered = candidate.lower()
+    if lowered in {"auto", "same"}:
+        return "auto"
+    if len(candidate) > 32:
+        return "invalid"
+    if not all(ch.isalnum() or ch == "-" for ch in candidate):
+        return "invalid"
+    parts = [part for part in candidate.split("-") if part]
+    if not parts:
+        return "invalid"
+    if not (2 <= len(parts[0]) <= 3 and parts[0].isalpha()):
+        return "invalid"
+    for part in parts[1:]:
+        if not (1 <= len(part) <= 8 and part.isalnum()):
+            return "invalid"
+    return "-".join(parts)
+
+
 def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
     config_path = repo_root / ".forge" / "config.toml"
     local_config_path = repo_root / ".forge" / "config.local.toml"
@@ -119,6 +144,7 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
             context_budget_tokens=12000,
             max_output_tokens=700,
             temperature=0.2,
+            output_language="auto",
             prompt_profile="strict_read_only",
             system_template_path=_default_system_template(),
             query_planner_enabled=True,
@@ -145,6 +171,7 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
             context_budget_tokens=12000,
             max_output_tokens=700,
             temperature=0.2,
+            output_language="auto",
             prompt_profile="strict_read_only",
             system_template_path=_default_system_template(),
             query_planner_enabled=True,
@@ -228,6 +255,16 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
     context_budget_tokens = _int_or_default(context_budget_raw, 12000)
     max_output_tokens = _int_or_default(max_output_raw, 700)
     temperature = _float_or_default(temperature_raw, 0.2)
+    output_language_raw, source["output_language"] = _first_non_none(
+        [
+            ("cli", getattr(args, "llm_output_language", None)),
+            ("env", os.environ.get("FORGE_LLM_OUTPUT_LANGUAGE")),
+            ("toml_local", _nested_get(local_payload, "llm.prompt.output_language")),
+            ("toml", _nested_get(payload, "llm.prompt.output_language")),
+            ("default", "auto"),
+        ]
+    )
+    output_language = _normalize_output_language(output_language_raw)
 
     prompt_profile_raw, source["prompt_profile"] = _first_non_none(
         [
@@ -337,6 +374,10 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
         validation_errors.append("max_output_tokens must be > 0")
     if temperature < 0 or temperature > 2:
         validation_errors.append("temperature must be within [0, 2]")
+    if output_language == "invalid":
+        validation_errors.append(
+            "llm.prompt.output_language must be auto or BCP-47-like (e.g. de, en, de-DE)"
+        )
     if prompt_profile not in ALLOWED_PROMPT_PROFILES:
         validation_errors.append(f"unknown prompt profile '{prompt_profile}'")
     if query_planner_mode not in {"off", "optional", "preferred"}:
@@ -375,6 +416,7 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
         context_budget_tokens=context_budget_tokens,
         max_output_tokens=max_output_tokens,
         temperature=temperature,
+        output_language=output_language,
         prompt_profile=prompt_profile,
         system_template_path=system_template_path,
         query_planner_enabled=query_planner_enabled,

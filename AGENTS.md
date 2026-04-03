@@ -134,6 +134,12 @@ When adding new functionality:
 4. keep the defaults useful
 5. keep configuration optional and secondary
 
+### Change tracking (mandatory)
+- Every implementation change must be mapped to at least one Feature ID (`docs/features/...`) or Issue ID (`docs/issues/...`).
+- Every implementation change must be documented in `CHANGELOG.md`.
+- Changelog entries must explicitly include the referenced Feature ID or Issue ID.
+- If no matching Feature/Issue exists yet, define one first and then reference it in the changelog entry.
+
 ## Definition of success
 
 A successful Forge change should make the project:

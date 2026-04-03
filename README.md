@@ -215,6 +215,7 @@ Use explicit CLI controls:
 
 ```bash
 forge --llm-mode auto --llm-provider openai_compatible --llm-base-url http://localhost:4000/v1 --llm-model gpt-4o-mini query standard "where is compute_price"
+forge --llm-mode auto --llm-output-language de query "In welchen Dateien wird ein LLM eingesetzt?"
 forge --llm-mode off review detailed src/controller.py
 forge --query-input-mode exact query "grep-like exact terms without interpretation"
 ```
@@ -239,6 +240,7 @@ temperature = 0.2
 [llm.prompt]
 system_template = "prompts/system/default_read_only.txt"
 profile = "strict_read_only"
+output_language = "auto" # auto | de | en | de-DE | ...
 
 [llm.query_planner]
 enabled = true

@@ -82,6 +82,7 @@ def resolve_settings(args, repo_root: Path) -> ResolvedLLMConfig:
             context_budget_tokens=config.context_budget_tokens,
             max_output_tokens=config.max_output_tokens,
             temperature=config.temperature,
+            output_language=config.output_language,
             prompt_profile=config.prompt_profile,
             system_template_path=config.system_template_path,
             query_planner_enabled=config.query_planner_enabled,
@@ -111,6 +112,7 @@ def _render_prompt(
     deterministic_summary: str,
     evidence: list[dict[str, object]],
     context_budget_tokens: int,
+    output_language_instruction: str,
 ) -> tuple[str | None, str | None]:
     path = _template_path(capability)
     if not path.exists():
@@ -135,6 +137,7 @@ def _render_prompt(
         capability=capability.value,
         profile=profile.value,
         task=task,
+        output_language_instruction=output_language_instruction,
         deterministic_summary=deterministic_summary,
         evidence_block=evidence_block,
     )
@@ -236,6 +239,7 @@ def _render_query_planner_prompt(
     source_language: str,
     deterministic_terms: list[str],
     settings: ResolvedLLMConfig,
+    output_language_instruction: str,
 ) -> tuple[str | None, str | None]:
     path = _query_planner_template_path()
     if not path.exists():
@@ -244,6 +248,7 @@ def _render_query_planner_prompt(
     prompt = Template(raw).safe_substitute(
         question=question,
         source_language=source_language,
+        output_language_instruction=output_language_instruction,
         deterministic_terms=", ".join(deterministic_terms[:16]),
         max_terms=str(settings.query_planner_max_terms),
         max_code_variants=str(settings.query_planner_max_code_variants),
@@ -405,6 +410,7 @@ def maybe_plan_query_terms(
         "fallback_reason": None,
         "latency_ms": None,
         "source_language": source_language,
+        "output_language": settings.output_language,
     }
 
     def _finish(
@@ -490,11 +496,17 @@ def maybe_plan_query_terms(
         )
 
     usage["attempted"] = True
+    output_language_instruction = (
+        "same language as the user question"
+        if settings.output_language == "auto"
+        else settings.output_language
+    )
     prompt, prompt_error = _render_query_planner_prompt(
         question=question,
         source_language=source_language,
         deterministic_terms=deterministic_terms,
         settings=settings,
+        output_language_instruction=output_language_instruction,
     )
     if prompt_error:
         usage["fallback_reason"] = prompt_error
@@ -621,6 +633,7 @@ def maybe_refine_summary(
         "context_budget_tokens": settings.context_budget_tokens,
         "max_output_tokens": settings.max_output_tokens,
         "temperature": settings.temperature,
+        "output_language": settings.output_language,
         "attempted": False,
         "used": False,
         "fallback_reason": None,
@@ -684,6 +697,11 @@ def maybe_refine_summary(
     usage["config_source"] = config_source
 
     usage["attempted"] = True
+    output_language_instruction = (
+        "same language as the user question"
+        if settings.output_language == "auto"
+        else settings.output_language
+    )
     prompt, prompt_error = _render_prompt(
         capability=capability,
         profile=profile,
@@ -691,6 +709,7 @@ def maybe_refine_summary(
         deterministic_summary=deterministic_summary,
         evidence=evidence,
         context_budget_tokens=settings.context_budget_tokens,
+        output_language_instruction=output_language_instruction,
     )
     if prompt_error:
         usage["fallback_reason"] = prompt_error

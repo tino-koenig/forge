@@ -524,6 +524,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         print(f"Provider: {llm_outcome.usage['provider'] or 'none'}")
         print(f"Base URL: {llm_outcome.usage['base_url'] or 'none'}")
         print(f"Model: {llm_outcome.usage['model'] or 'none'}")
+        print(f"Output language: {llm_outcome.usage.get('output_language') or 'auto'}")
         if llm_outcome.usage.get("fallback_reason"):
             print(f"Fallback: {llm_outcome.usage['fallback_reason']}")
         print("\n--- Provenance ---")

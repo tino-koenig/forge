@@ -72,6 +72,7 @@ temperature = 0.2
 [llm.prompt]
 system_template = "prompts/system/default_read_only.txt"
 profile = "strict_read_only"
+output_language = "auto" # auto | de | en | de-DE | ...
 
 [llm.policy]
 simple = "off"
@@ -94,6 +95,7 @@ Allowed controls:
 - `llm.request.temperature`
 - `llm.prompt.system_template`
 - `llm.prompt.profile`
+- `llm.prompt.output_language`
 
 Purpose:
 - `context_budget_tokens`: explicit upper bound for evidence/context sent to model
@@ -101,6 +103,7 @@ Purpose:
 - `temperature`: bounded creativity control
 - `system_template`: versioned system prompt file path in repo
 - `profile`: fixed behavior profile to keep role intent explicit
+- `output_language`: desired language for LLM-generated text outputs (`auto` keeps user-question language)
 
 Initial allowed prompt profiles:
 - `strict_read_only`
@@ -120,6 +123,7 @@ Supported overrides (initial):
 - `FORGE_LLM_MODEL`
 - `FORGE_LLM_API_KEY`
 - `FORGE_LLM_TIMEOUT_S`
+- `FORGE_LLM_OUTPUT_LANGUAGE`
 
 `.env` usage is allowed as local developer mechanism, but Forge behavior is defined in terms of environment variables, not implicit hidden profiles.
 

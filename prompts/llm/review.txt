@@ -10,6 +10,7 @@ Requirements:
 - Keep output grounded in evidence snippets.
 - Keep severity implications explicit but not exaggerated.
 - Do not add findings without evidence.
+- Write the final answer in: ${output_language_instruction}
 
 Deterministic summary:
 ${deterministic_summary}

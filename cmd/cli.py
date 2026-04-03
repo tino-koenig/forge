@@ -77,6 +77,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Explicit LLM timeout in seconds (or FORGE_LLM_TIMEOUT_S)",
     )
     parser.add_argument(
+        "--llm-output-language",
+        help=(
+            "Preferred LLM response language (e.g. de, en, de-DE, auto). "
+            "Can also be set via FORGE_LLM_OUTPUT_LANGUAGE."
+        ),
+    )
+    parser.add_argument(
         "--query-input-mode",
         choices=("planner", "exact"),
         default="planner",

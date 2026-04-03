@@ -1,0 +1,187 @@
+# Manual status tracking for features and issues.
+# `defined_on` and `implemented_on` must be YYYY-MM-DD if set.
+# Any item without override defaults to status="defined".
+
+[[feature]]
+id = "001"
+status = "implemented"
+implemented_on = "2026-04-02"
+notes = "Core CLI and capability model implemented."
+
+[[feature]]
+id = "002"
+status = "implemented"
+implemented_on = "2026-04-02"
+
+[[feature]]
+id = "003"
+status = "implemented"
+implemented_on = "2026-04-02"
+
+[[feature]]
+id = "004"
+status = "implemented"
+implemented_on = "2026-04-02"
+
+[[feature]]
+id = "005"
+status = "implemented"
+implemented_on = "2026-04-02"
+
+[[feature]]
+id = "006"
+status = "implemented"
+implemented_on = "2026-04-02"
+
+[[feature]]
+id = "007"
+status = "implemented"
+implemented_on = "2026-04-02"
+
+[[feature]]
+id = "008"
+status = "implemented"
+implemented_on = "2026-04-03"
+
+[[feature]]
+id = "009"
+status = "implemented"
+implemented_on = "2026-04-03"
+
+[[feature]]
+id = "010"
+status = "implemented"
+implemented_on = "2026-04-03"
+
+[[feature]]
+id = "011"
+status = "implemented"
+implemented_on = "2026-04-03"
+
+[[feature]]
+id = "012"
+status = "implemented"
+implemented_on = "2026-04-03"
+
+[[feature]]
+id = "013"
+status = "implemented"
+implemented_on = "2026-04-03"
+
+[[feature]]
+id = "014"
+status = "implemented"
+implemented_on = "2026-04-03"
+
+[[feature]]
+id = "015"
+status = "implemented"
+implemented_on = "2026-04-03"
+
+[[feature]]
+id = "016"
+status = "implemented"
+implemented_on = "2026-04-03"
+
+[[feature]]
+id = "017"
+status = "implemented"
+implemented_on = "2026-04-03"
+
+[[feature]]
+id = "018"
+status = "implemented"
+implemented_on = "2026-04-03"
+
+[[feature]]
+id = "019"
+status = "implemented"
+implemented_on = "2026-04-03"
+
+[[feature]]
+id = "020"
+status = "defined"
+notes = "Defined, not marked implemented yet."
+
+[[feature]]
+id = "021"
+status = "defined"
+
+[[feature]]
+id = "022"
+status = "implemented"
+implemented_on = "2026-04-03"
+
+[[feature]]
+id = "023"
+status = "implemented"
+implemented_on = "2026-04-03"
+
+[[feature]]
+id = "024"
+status = "defined"
+
+[[feature]]
+id = "025"
+status = "defined"
+
+[[feature]]
+id = "026"
+status = "implemented"
+implemented_on = "2026-04-03"
+
+[[feature]]
+id = "027"
+status = "implemented"
+implemented_on = "2026-04-03"
+
+[[feature]]
+id = "028"
+status = "implemented"
+implemented_on = "2026-04-03"
+
+[[feature]]
+id = "029"
+status = "defined"
+
+[[feature]]
+id = "030"
+status = "defined"
+
+[[feature]]
+id = "031"
+status = "defined"
+
+[[feature]]
+id = "032"
+status = "defined"
+
+[[feature]]
+id = "033"
+status = "defined"
+
+[[feature]]
+id = "034"
+status = "defined"
+
+[[feature]]
+id = "035"
+status = "implemented"
+defined_on = "2026-04-03"
+implemented_on = "2026-04-03"
+notes = "LLM output language control via CLI/env/TOML and prompt propagation."
+
+# Issue examples:
+# [[issue]]
+# id = "12"
+# title = "Query output misses direct code evidence"
+# status = "open"
+# defined_on = "2026-04-03"
+# notes = "Can point to docs/issues/12-query-output-evidence.md once created."
+
+[[issue]]
+id = "1"
+status = "implemented"
+defined_on = "2026-04-03"
+implemented_on = "2026-04-03"
+notes = "Introduced mandatory change tracking policy and changelog."

@@ -11,6 +11,9 @@ Constraints:
 - Return strict JSON only.
 - Do not include markdown or code fences.
 - Do not claim file paths, symbols, or matches.
+- Use language `${output_language_instruction}` for free-text fields where language matters.
+- Keep `normalized_question_en` in English.
+- Keep enum-like values (`target_scope`, `entity_types`) in canonical English.
 - Keep lists bounded:
   - search_terms max ${max_terms}
   - code_variants max ${max_code_variants}

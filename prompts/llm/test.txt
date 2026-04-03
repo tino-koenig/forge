@@ -10,6 +10,7 @@ Requirements:
 - Keep output practical for test planning.
 - Keep suggestions grounded in extracted code evidence.
 - Avoid inventing behavior not visible in the target.
+- Write the final answer in: ${output_language_instruction}
 
 Deterministic summary:
 ${deterministic_summary}

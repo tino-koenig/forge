@@ -10,6 +10,7 @@ Requirements:
 - Keep output concise and role-focused.
 - Use only evidence-backed wording.
 - Do not invent unresolved certainty.
+- Write the final answer in: ${output_language_instruction}
 
 Deterministic summary:
 ${deterministic_summary}

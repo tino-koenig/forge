@@ -10,6 +10,7 @@ Requirements:
 - Keep output orientation-focused for repository understanding.
 - Use only visible structural evidence.
 - Do not claim architecture details that are not evidenced.
+- Write the final answer in: ${output_language_instruction}
 
 Deterministic summary:
 ${deterministic_summary}

@@ -770,6 +770,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                     "used": False,
                     "provider": llm_settings.provider,
                     "model": llm_settings.model,
+                    "output_language": llm_settings.output_language,
                     "prompt_template": "prompts/llm/query_planner.txt",
                     "fallback_reason": "skipped by --query-input-mode exact",
                     "latency_ms": None,
@@ -812,6 +813,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                 "mode": "off",
                 "provider": llm_settings.provider,
                 "model": llm_settings.model,
+                "output_language": llm_settings.output_language,
                 "fallback_reason": "skipped by --query-input-mode exact",
             }
         )
@@ -841,6 +843,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         print(f"Provider: {llm_outcome.usage['provider'] or 'none'}")
         print(f"Base URL: {llm_outcome.usage['base_url'] or 'none'}")
         print(f"Model: {llm_outcome.usage['model'] or 'none'}")
+        print(f"Output language: {llm_outcome.usage.get('output_language') or 'auto'}")
         if llm_outcome.usage.get("fallback_reason"):
             print(f"Fallback: {llm_outcome.usage['fallback_reason']}")
         print("\n--- Provenance ---")
