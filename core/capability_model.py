@@ -13,6 +13,7 @@ class Capability(str, Enum):
     DESCRIBE = "describe"
     TEST = "test"
     INDEX = "index"
+    DOCTOR = "doctor"
 
 
 class Profile(str, Enum):
@@ -50,6 +51,7 @@ CAPABILITY_POLICIES: dict[Capability, CapabilityPolicy] = {
     Capability.REVIEW: CapabilityPolicy(allowed_effects=frozenset({EffectClass.READ_ONLY})),
     Capability.DESCRIBE: CapabilityPolicy(allowed_effects=frozenset({EffectClass.READ_ONLY})),
     Capability.TEST: CapabilityPolicy(allowed_effects=frozenset({EffectClass.READ_ONLY})),
+    Capability.DOCTOR: CapabilityPolicy(allowed_effects=frozenset({EffectClass.READ_ONLY})),
     Capability.INDEX: CapabilityPolicy(
         allowed_effects=frozenset({EffectClass.READ_ONLY, EffectClass.FORGE_WRITE})
     ),

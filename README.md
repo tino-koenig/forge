@@ -9,6 +9,7 @@ It focuses on explicit modes and clear building blocks instead of hidden agent b
 - review code and structures
 - draft tests
 - describe a codebase
+- run diagnostics (`doctor`)
 - support targeted fixes and implementations
 
 Forge is designed to be useful in small, focused tasks first. More advanced workflows are built from the same visible, understandable foundations.
@@ -87,6 +88,15 @@ Examples:
 - Describe the architecture.
 - Explain the import flow.
 
+### `forge doctor`
+Alias: `forge config validate`
+Validate local Forge setup and provider/config readiness.
+
+Examples:
+- Validate config and environment wiring.
+- Check if local prompt templates are readable.
+- Probe OpenAI-compatible endpoint reachability when requested.
+
 ### Later modes
 - `forge fix`
 - `forge implement`
@@ -101,6 +111,8 @@ forge query "Where are addresses imported?"
 forge review src/Controller/UserController.php
 forge test src/Service/PriceCalculator.php --case "negative amount"
 forge describe
+forge doctor --check-llm-endpoint
+forge config validate --check-llm-endpoint
 ```
 
 
@@ -155,7 +167,7 @@ python3 scripts/run_quality_gates.py
 ```
 
 The suite checks:
-- behavior smoke coverage across index/query/explain/review/describe/test
+- behavior smoke coverage across index/doctor/query/explain/review/describe/test
 - output contract JSON shape for query/explain/review
 - LLM-assisted path coverage (mock provider) with provenance metadata
 - evidence quality expectations

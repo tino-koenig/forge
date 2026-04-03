@@ -84,6 +84,8 @@ def ensure_output_contract(payload: dict, capability: str) -> None:
 def gate_behavior_smoke(repo_root: Path) -> None:
     commands = [
         ["python3", str(FORGE), "--repo-root", str(repo_root), "index"],
+        ["python3", str(FORGE), "--repo-root", str(repo_root), "doctor"],
+        ["python3", str(FORGE), "--repo-root", str(repo_root), "config", "validate"],
         ["python3", str(FORGE), "--repo-root", str(repo_root), "query", "where", "is", "compute_price"],
         ["python3", str(FORGE), "--repo-root", str(repo_root), "explain", "compute_price"],
         ["python3", str(FORGE), "--repo-root", str(repo_root), "review", "src/controller.py"],
@@ -95,6 +97,10 @@ def gate_behavior_smoke(repo_root: Path) -> None:
 
 
 def gate_output_contract(repo_root: Path) -> None:
+    doctor_out = run_cmd(
+        ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "doctor"],
+        cwd=ROOT,
+    ).stdout
     query_out = run_cmd(
         ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "query", "compute_price"],
         cwd=ROOT,
@@ -108,10 +114,12 @@ def gate_output_contract(repo_root: Path) -> None:
         cwd=ROOT,
     ).stdout
 
+    doctor_payload = parse_json_output(doctor_out)
     query_payload = parse_json_output(query_out)
     explain_payload = parse_json_output(explain_out)
     review_payload = parse_json_output(review_out)
 
+    ensure_output_contract(doctor_payload, "doctor")
     ensure_output_contract(query_payload, "query")
     ensure_output_contract(explain_payload, "explain")
     ensure_output_contract(review_payload, "review")

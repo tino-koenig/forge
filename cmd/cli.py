@@ -12,6 +12,7 @@ from core.runtime import execute
 
 REQUIRES_PAYLOAD = {
     "index": False,
+    "doctor": False,
     "query": True,
     "explain": True,
     "review": True,
@@ -68,6 +69,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional operation/profile prefix: simple|standard|detailed",
     )
 
+    doctor_parser = subparsers.add_parser("doctor", help="Validate Forge config and runtime setup")
+    doctor_parser.add_argument(
+        "parts",
+        nargs="*",
+        help="Optional profile prefix: simple|standard|detailed",
+    )
+    doctor_parser.add_argument(
+        "--check-llm-endpoint",
+        action="store_true",
+        help="Probe configured OpenAI-compatible endpoint (/models) with timeout",
+    )
+
+    config_parser = subparsers.add_parser("config", help="Configuration commands")
+    config_subparsers = config_parser.add_subparsers(dest="config_command", required=True)
+    config_validate_parser = config_subparsers.add_parser(
+        "validate",
+        help="Validate Forge config and runtime setup (alias for doctor)",
+    )
+    config_validate_parser.add_argument(
+        "parts",
+        nargs="*",
+        help="Optional profile prefix: simple|standard|detailed",
+    )
+    config_validate_parser.add_argument(
+        "--check-llm-endpoint",
+        action="store_true",
+        help="Probe configured OpenAI-compatible endpoint (/models) with timeout",
+    )
+
     query_parser = subparsers.add_parser("query", help="Run query capability")
     query_parser.add_argument(
         "parts",
@@ -113,11 +143,17 @@ def main(argv: list[str] | None = None) -> int:
     env_file_path = Path(args.env_file).resolve() if args.env_file else (repo_root / ".env")
     load_env_file(env_file_path)
     parts = getattr(args, "parts", []) or []
+    capability_name = args.capability
+    if args.capability == "config":
+        if getattr(args, "config_command", None) != "validate":
+            parser.error("Unsupported config command. Use: forge config validate")
+            return 2
+        capability_name = "doctor"
     try:
         request = build_request(
-            capability_name=args.capability,
+            capability_name=capability_name,
             parts=parts,
-            require_payload=REQUIRES_PAYLOAD[args.capability],
+            require_payload=REQUIRES_PAYLOAD[capability_name],
         )
     except ValueError as exc:
         parser.error(str(exc))
