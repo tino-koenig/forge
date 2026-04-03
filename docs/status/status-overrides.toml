@@ -275,6 +275,13 @@ defined_on = "2026-04-03"
 implemented_on = "2026-04-03"
 notes = "Run history now persists structured output.contract for every non-runs capability execution (text and json modes)."
 
+[[feature]]
+id = "046"
+status = "implemented"
+defined_on = "2026-04-03"
+implemented_on = "2026-04-03"
+notes = "Query ranking now includes bounded path/symbol/summary signals plus source_type metadata and repo-first source-aware scoring."
+
 # Issue examples:
 # [[issue]]
 # id = "12"

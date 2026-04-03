@@ -221,6 +221,7 @@ class Candidate:
     score: int
     path_class: str
     retrieval_sources: list[str]
+    source_type: str
 
 
 @dataclass
@@ -238,6 +239,22 @@ class ExplainFeedback:
     linkage_confidence: str
     relevance_score: int
     rationale: list[str]
+
+
+FRAMEWORK_PATH_MARKERS = (
+    "vendor/",
+    "site-packages/",
+    "dist-packages/",
+    ".venv/lib/",
+)
+
+EXTERNAL_PATH_MARKERS = (
+    "third_party/",
+    "external/",
+    "extern/",
+    "deps/",
+    "submodules/",
+)
 
 
 def normalize_question(question: str) -> str:
@@ -657,6 +674,8 @@ def score_candidate(
     entity_types: list[str],
     index_explain_summary: str | None,
     question_terms: set[str],
+    source_type: str,
+    prefer_repo_sources: bool,
 ) -> int:
     content_evidences = [item for item in evidences if item.source == "content_match"]
     path_evidences = [item for item in evidences if item.source == "path_match"]
@@ -728,7 +747,38 @@ def score_candidate(
         overlap = sum(1 for term in question_terms if term in lowered)
         score += min(overlap, 4)
 
+    # Prefer repository-owned sources by default; keep penalties bounded.
+    if source_type == "repo":
+        score += 2
+    elif source_type == "framework":
+        score -= 3 if prefer_repo_sources else 1
+    elif source_type == "external":
+        score -= 4 if prefer_repo_sources else 2
+
     return score
+
+
+def classify_source_type(
+    rel_path: str,
+    *,
+    path_class: str,
+    index_entry: dict[str, object] | None,
+) -> str:
+    if index_entry and isinstance(index_entry.get("source_type"), str):
+        raw = str(index_entry.get("source_type")).strip().lower()
+        if raw in {"repo", "framework", "external"}:
+            return raw
+
+    lowered = rel_path.lower()
+    if lowered.startswith("docs/") and path_class in {"low_priority", "normal", "preferred"}:
+        return "repo"
+    if any(marker in lowered for marker in FRAMEWORK_PATH_MARKERS):
+        return "framework"
+    if any(lowered.startswith(marker) for marker in EXTERNAL_PATH_MARKERS):
+        return "external"
+    if path_class == "index_exclude" and lowered.startswith("vendor/"):
+        return "framework"
+    return "repo"
 
 
 def rank_candidates(
@@ -742,9 +792,20 @@ def rank_candidates(
     index_entry_map: dict[str, dict[str, object]],
     question_terms: set[str],
 ) -> list[Candidate]:
+    preliminary_source_types: dict[str, str] = {}
+    for rel_path in matches:
+        path_class = path_classes.get(rel_path, "normal")
+        preliminary_source_types[rel_path] = classify_source_type(
+            rel_path,
+            path_class=path_class,
+            index_entry=index_entry_map.get(rel_path),
+        )
+    prefer_repo_sources = any(value == "repo" for value in preliminary_source_types.values())
+
     ranked: list[Candidate] = []
     for rel_path, evidences in matches.items():
         path_class = path_classes.get(rel_path, "normal")
+        source_type = preliminary_source_types.get(rel_path, "repo")
         retrieval_sources = sorted({item.source for item in evidences})
         ranked.append(
             Candidate(
@@ -764,9 +825,12 @@ def rank_candidates(
                         else None
                     ),
                     question_terms=question_terms,
+                    source_type=source_type,
+                    prefer_repo_sources=prefer_repo_sources,
                 ),
                 path_class=path_class,
                 retrieval_sources=retrieval_sources,
+                source_type=source_type,
             )
         )
     ranked.sort(key=lambda c: (c.score, len(c.evidences)), reverse=True)
@@ -925,7 +989,7 @@ def print_output(
             print(
                 f"{idx}. {candidate.path} "
                 f"(score={candidate.score}, class={candidate.path_class}, matches={len(candidate.evidences)}, "
-                f"sources={','.join(candidate.retrieval_sources)})"
+                f"sources={','.join(candidate.retrieval_sources)}, source_type={candidate.source_type})"
             )
         else:
             print(f"{idx}. {candidate.path} ({len(candidate.evidences)} matches)")
@@ -1095,6 +1159,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                     "text": item.text,
                     "term": item.term,
                     "source": item.source,
+                    "retrieval_source": item.source,
                 }
             )
     orchestration = maybe_orchestrate_query_actions(
@@ -1188,6 +1253,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                 "path_class": candidate.path_class,
                 "matches": len(candidate.evidences),
                 "retrieval_sources": candidate.retrieval_sources,
+                "source_type": candidate.source_type,
             }
             for candidate in candidates[:8]
         ],

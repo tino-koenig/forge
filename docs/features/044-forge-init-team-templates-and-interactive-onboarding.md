@@ -73,3 +73,40 @@ Init output should distinguish:
 - team templates can generate repository-owned `.forge/` config
 - interactive flow is concise, default-guided, and preview-first
 - docs clearly define which init outputs belong in git
+
+## Implemented Behavior (Current)
+
+- `forge init` is available as a first-run setup command.
+- Supported templates:
+  - `balanced`
+  - `strict-review`
+  - `lightweight`
+- Supported modes:
+  - interactive (default)
+  - non-interactive (`--non-interactive`)
+- Safety behavior:
+  - previews planned files before write
+  - blocks overwrite of managed files unless `--force` is set
+  - supports `--dry-run` (no write)
+- Generated files:
+  - `.forge/config.toml` (repo-owned)
+  - `.forge/review-rules.toml` (repo-owned)
+  - `.forge/template-meta.toml` (repo-owned)
+  - `.forge/config.local.toml.example` (local example)
+
+## How To Use
+
+- List templates:
+  - `forge init --list-templates`
+- Non-interactive setup:
+  - `forge init --non-interactive --template balanced`
+- Preview only:
+  - `forge init --non-interactive --template balanced --dry-run`
+- Overwrite existing managed init files:
+  - `forge init --non-interactive --template balanced --force`
+
+## Known Limits / Notes
+
+- Interactive mode requires a TTY.
+- `forge init` currently writes generated defaults; it does not migrate previous template versions.
+- Real local overrides belong in `.forge/config.local.toml` (not generated with secrets by `init`).

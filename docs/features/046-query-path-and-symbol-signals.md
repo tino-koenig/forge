@@ -77,3 +77,12 @@ Path intent is often explicit in user questions, while content-only matching can
 - short common path tokens are prevented from dominating scores
 - index fallback behavior remains unchanged
 - retrieval output can show both match-source and origin-source (`retrieval_source` and `source_type`)
+
+## Implementation Notes (2026-04-03)
+
+Implemented in `modes/query.py` with deterministic scoring and metadata output:
+- candidate model now includes `source_type`
+- evidence payload now includes `retrieval_source`
+- source-aware ranking prefers `repo` candidates over `framework`/`external` when repo evidence exists
+- `source_type` is derived from index metadata when available, otherwise from bounded path heuristics
+- full-view text output and JSON contract expose both `retrieval_sources` and `source_type`

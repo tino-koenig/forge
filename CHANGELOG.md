@@ -8,6 +8,7 @@ All notable changes to Forge should be documented in this file.
 - issue 1: status index for features/issues with defined and implemented dates via `scripts/status_index.py` and `docs/status/*`
 - issue 1: issue folder bootstrap in `docs/issues/`
 - feature 046: query ranking now includes bounded path-segment/full-path and indexed `top_level_symbols` signals with short-token guardrails (e.g. `api`)
+- feature 046: query output now exposes retrieval-source metadata (`retrieval_source`) and source-origin metadata (`source_type`) with repo-first source-aware ranking
 - feature 035: explicit LLM output-language control (`--llm-output-language`, `FORGE_LLM_OUTPUT_LANGUAGE`, `llm.prompt.output_language`)
 - feature 025: `--from-run` support for `explain`/`review`/`test`/`describe` with deterministic payload resolution and provenance metadata
 - feature 024: `forge runs prune` with `--dry-run`, retention criteria (`--keep-last`, `--older-than-days`), config defaults, and safe JSONL rewrite

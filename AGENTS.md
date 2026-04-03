@@ -151,6 +151,7 @@ When adding new functionality:
 - When behavior changes later, update both:
   - `CHANGELOG.md`
   - the implementation addendum in the corresponding feature/issue doc
+- Do not set an item to `implemented` in `docs/status/status-overrides.toml` unless the corresponding feature/issue document has been updated in the same change.
 
 ## Definition of success
 
