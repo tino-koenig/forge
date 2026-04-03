@@ -141,6 +141,17 @@ When adding new functionality:
 - Documentation-only updates (feature specs, roadmap text, wording cleanups) do not require `CHANGELOG.md` entries.
 - If no matching Feature/Issue exists yet, define one first and then reference it in the changelog entry.
 
+### Implemented-doc addendum (mandatory)
+- For every Feature/Issue marked `implemented`, keep the spec and an implementation addendum in the same document.
+- Add (or maintain) these sections at the end of implemented docs:
+  - `## Implemented Behavior (Current)`
+  - `## How To Use` (or `## How To Validate Quickly` when usage is not command-facing)
+  - `## Known Limits / Notes`
+- Keep the addendum concise and operational. Prefer concrete commands and observable behavior over architecture narrative.
+- When behavior changes later, update both:
+  - `CHANGELOG.md`
+  - the implementation addendum in the corresponding feature/issue doc
+
 ## Definition of success
 
 A successful Forge change should make the project:
