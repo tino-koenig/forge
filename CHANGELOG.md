@@ -26,6 +26,8 @@ All notable changes to Forge should be documented in this file.
 - feature 050: query orchestration now uses explicit action handlers for all catalog actions with per-iteration handler diagnostics and bounded search expansion
 - feature 051: query orchestration now applies deterministic progress scoring with source-aware weighting and no-progress stop criteria (`done_reason=no_progress`)
 - feature 052: query now exposes stable per-iteration orchestration trace diagnostics (budgets, source scope/distribution, snapshots, fallback/block reasons) in JSON and full text view
+- feature 053: added optional `.forge/frameworks.toml` source profiles with `--framework-profile` query selection, read-only local framework path retrieval, and source provenance metadata (`source_type`/`source_origin`/framework identity)
+- feature 054: added dedicated free-question `ask` mode (`ask`, `ask:repo`, `ask:docs`, `ask:latest`) with compact default output, explicit ask metadata in contract, and staged warnings for `ask:latest`/`--guided`
 
 ### Changed
 - issue 1: contributor guidance now requires changelog entries with feature/issue reference for each change

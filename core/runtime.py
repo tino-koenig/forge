@@ -6,6 +6,7 @@ from argparse import Namespace
 
 from core.capability_model import Capability, CommandRequest
 from core.effects import ExecutionSession
+from modes.ask import run as run_ask
 from modes.describe import run as run_describe
 from modes.doctor import run as run_doctor
 from modes.explain import run as run_explain
@@ -20,6 +21,7 @@ from modes.test import run as run_test
 HANDLERS = {
     Capability.INIT: run_init,
     Capability.INDEX: run_index,
+    Capability.ASK: run_ask,
     Capability.QUERY: run_query,
     Capability.EXPLAIN: run_explain,
     Capability.REVIEW: run_review,

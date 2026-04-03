@@ -25,6 +25,10 @@ REQUIRES_PAYLOAD = {
     "review": True,
     "describe": False,
     "test": True,
+    "ask": True,
+    "ask:repo": True,
+    "ask:docs": True,
+    "ask:latest": True,
 }
 
 
@@ -233,6 +237,94 @@ def build_parser() -> argparse.ArgumentParser:
 
     query_parser = subparsers.add_parser("query", help="Run query capability")
     query_parser.add_argument(
+        "--framework-profile",
+        help="Optional framework profile id/alias from .forge/frameworks.toml",
+    )
+    query_parser.add_argument(
+        "parts",
+        nargs="+",
+        help="Question; optional profile prefix: simple|standard|detailed",
+    )
+
+    ask_parser = subparsers.add_parser("ask", help="User-friendly ask entrypoint (maps to query)")
+    ask_parser.add_argument(
+        "--framework-profile",
+        help="Optional framework profile id/alias from .forge/frameworks.toml",
+    )
+    ask_parser.add_argument(
+        "--profile",
+        dest="framework_profile",
+        help="Alias for --framework-profile (ask preset profile selection)",
+    )
+    ask_parser.add_argument(
+        "--guided",
+        action="store_true",
+        help="Reserved for later guided clarification mode (staged rollout).",
+    )
+    ask_parser.add_argument(
+        "parts",
+        nargs="+",
+        help="Question; optional profile prefix: simple|standard|detailed",
+    )
+
+    ask_repo_parser = subparsers.add_parser("ask:repo", help="Ask with repository-focused source preset")
+    ask_repo_parser.add_argument(
+        "--framework-profile",
+        help="Optional framework profile id/alias from .forge/frameworks.toml",
+    )
+    ask_repo_parser.add_argument(
+        "--profile",
+        dest="framework_profile",
+        help="Alias for --framework-profile (ask preset profile selection)",
+    )
+    ask_repo_parser.add_argument(
+        "--guided",
+        action="store_true",
+        help="Reserved for later guided clarification mode (staged rollout).",
+    )
+    ask_repo_parser.add_argument(
+        "parts",
+        nargs="+",
+        help="Question; optional profile prefix: simple|standard|detailed",
+    )
+
+    ask_docs_parser = subparsers.add_parser("ask:docs", help="Ask with docs/framework-focused source preset")
+    ask_docs_parser.add_argument(
+        "--framework-profile",
+        help="Optional framework profile id/alias from .forge/frameworks.toml",
+    )
+    ask_docs_parser.add_argument(
+        "--profile",
+        dest="framework_profile",
+        help="Alias for --framework-profile (ask preset profile selection)",
+    )
+    ask_docs_parser.add_argument(
+        "--guided",
+        action="store_true",
+        help="Reserved for later guided clarification mode (staged rollout).",
+    )
+    ask_docs_parser.add_argument(
+        "parts",
+        nargs="+",
+        help="Question; optional profile prefix: simple|standard|detailed",
+    )
+
+    ask_latest_parser = subparsers.add_parser("ask:latest", help="Ask with latest/web-oriented source preset")
+    ask_latest_parser.add_argument(
+        "--framework-profile",
+        help="Optional framework profile id/alias from .forge/frameworks.toml",
+    )
+    ask_latest_parser.add_argument(
+        "--profile",
+        dest="framework_profile",
+        help="Alias for --framework-profile (ask preset profile selection)",
+    )
+    ask_latest_parser.add_argument(
+        "--guided",
+        action="store_true",
+        help="Reserved for later guided clarification mode (staged rollout).",
+    )
+    ask_latest_parser.add_argument(
         "parts",
         nargs="+",
         help="Question; optional profile prefix: simple|standard|detailed",
@@ -326,6 +418,28 @@ def main(argv: list[str] | None = None) -> int:
     load_env_file(env_file_path)
     parts = getattr(args, "parts", []) or []
     capability_name = args.capability
+    ask_preset_map = {
+        "ask": "auto",
+        "ask:repo": "repo",
+        "ask:docs": "docs",
+        "ask:latest": "latest",
+    }
+    requested_capability = capability_name
+    if capability_name in ask_preset_map:
+        capability_name = "ask"
+        args.ask_preset = ask_preset_map[requested_capability]
+        args.ask_mode = True
+        args.ask_command = requested_capability
+        args.ask_guided = bool(getattr(args, "guided", False))
+        argv_effective = argv or sys.argv[1:]
+        user_set_view = any(item == "--view" or item.startswith("--view=") for item in argv_effective)
+        if not user_set_view and not getattr(args, "details", False):
+            args.view = "compact"
+    else:
+        args.ask_preset = None
+        args.ask_mode = False
+        args.ask_command = None
+        args.ask_guided = False
     if args.capability == "config":
         if getattr(args, "config_command", None) != "validate":
             parser.error("Unsupported config command. Use: forge config validate")

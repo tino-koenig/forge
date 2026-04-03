@@ -400,6 +400,10 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             "path": str(item.path.relative_to(repo_root)),
             "line": item.line,
             "text": item.text,
+            "source_type": "repo",
+            "source_origin": "repo",
+            "framework_id": None,
+            "framework_version": None,
         }
         for item in evidence
     ]
@@ -419,6 +423,12 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         "role_classification": {"role": role, "reason": rationale},
         "related_files": [str(path) for path in related],
         "resolved_target": str(rel_target),
+        "resolved_target_source": {
+            "source_type": "repo",
+            "source_origin": "repo",
+            "framework_id": None,
+            "framework_version": None,
+        },
         "evidence_facts": evidence_facts,
         "inference_points": [
             {

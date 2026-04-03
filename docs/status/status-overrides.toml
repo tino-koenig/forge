@@ -277,6 +277,20 @@ implemented_on = "2026-04-03"
 notes = "Query now emits stable iteration-level orchestration traces in JSON and full view with source-aware scope/cap diagnostics and fallback visibility."
 
 [[feature]]
+id = "053"
+status = "implemented"
+defined_on = "2026-04-03"
+implemented_on = "2026-04-04"
+notes = "Added optional .forge/frameworks.toml profile loading, query --framework-profile selection, read-only local framework/docs path retrieval, and source provenance metadata across query/explain contracts."
+
+[[feature]]
+id = "054"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Added ask UX entrypoints (ask, ask:repo/docs/latest) as dedicated free-question LLM mode (not repository file search), with explicit preset metadata and staged warnings for latest/guided behavior."
+
+[[feature]]
 id = "045"
 status = "implemented"
 defined_on = "2026-04-03"

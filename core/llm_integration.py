@@ -27,6 +27,9 @@ class LLMInvocationPolicy(str):
 
 
 POLICY_MATRIX: dict[tuple[Capability, Profile], str] = {
+    (Capability.ASK, Profile.SIMPLE): LLMInvocationPolicy.OPTIONAL,
+    (Capability.ASK, Profile.STANDARD): LLMInvocationPolicy.PREFERRED,
+    (Capability.ASK, Profile.DETAILED): LLMInvocationPolicy.PREFERRED,
     (Capability.QUERY, Profile.SIMPLE): LLMInvocationPolicy.OFF,
     (Capability.QUERY, Profile.STANDARD): LLMInvocationPolicy.OPTIONAL,
     (Capability.QUERY, Profile.DETAILED): LLMInvocationPolicy.OPTIONAL,

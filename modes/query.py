@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import fnmatch
 import re
 from dataclasses import dataclass
 from pathlib import Path
 import time
 
 from core.analysis_primitives import load_index_entry_map, load_index_path_class_map, path_class_weight
-from core.capability_model import CommandRequest, Profile
+from core.capability_model import CommandRequest, EffectClass, Profile
 from core.effects import ExecutionSession
+from core.framework_profiles import FrameworkProfile, load_framework_registry, select_framework_profile
 from core.llm_integration import (
     maybe_orchestrate_query_actions,
     maybe_plan_query_terms,
@@ -18,7 +20,7 @@ from core.llm_integration import (
 from core.mode_capability_contract import evaluate_action_eligibility
 from core.output_contracts import build_contract, emit_contract_json
 from core.output_views import is_compact, is_full, resolve_view
-from core.repo_io import iter_repo_files, read_text_file
+from core.repo_io import TEXT_FILE_EXTENSIONS, iter_repo_files, read_text_file
 
 
 STOP_WORDS = {
@@ -216,6 +218,17 @@ class Candidate:
     path_class: str
     retrieval_sources: list[str]
     source_type: str
+    source_origin: str
+    framework_id: str | None
+    framework_version: str | None
+
+
+@dataclass(frozen=True)
+class SourceMetadata:
+    source_type: str
+    source_origin: str
+    framework_id: str | None = None
+    framework_version: str | None = None
 
 
 @dataclass
@@ -608,6 +621,87 @@ def _summary_term_score(summary_lower: str, term: str) -> tuple[int, list[str]]:
     return min(score, 6), matched_tokens[:4]
 
 
+def _framework_root_candidates(profile: FrameworkProfile) -> list[tuple[Path, str]]:
+    roots: list[tuple[Path, str]] = []
+    for root in profile.framework_roots:
+        roots.append((root, "framework"))
+    for root in profile.framework_docs_roots:
+        roots.append((root, "web_docs"))
+    return roots
+
+
+def _is_excluded_by_glob(path: Path, *, root: Path, exclude_globs: list[str]) -> bool:
+    if not exclude_globs:
+        return False
+    try:
+        rel = str(path.relative_to(root))
+    except ValueError:
+        rel = str(path)
+    for pattern in exclude_globs:
+        if fnmatch.fnmatch(rel, pattern):
+            return True
+    return False
+
+
+def _collect_framework_local_matches(
+    *,
+    profile: FrameworkProfile,
+    terms: list[str],
+    session: ExecutionSession,
+    term_weights: dict[str, int],
+) -> tuple[dict[str, list[Evidence]], dict[str, SourceMetadata], list[str]]:
+    results: dict[str, list[Evidence]] = {}
+    source_meta: dict[str, SourceMetadata] = {}
+    warnings: list[str] = []
+
+    for root, source_type in _framework_root_candidates(profile):
+        root_path = root if root.is_absolute() else root.resolve()
+        if not root_path.exists() or not root_path.is_dir():
+            warnings.append(f"framework path missing, skipped: {root_path}")
+            continue
+        session.record_effect(EffectClass.READ_ONLY, f"scan framework source root {root_path}")
+        for file_path in root_path.rglob("*"):
+            if not file_path.is_file():
+                continue
+            if file_path.suffix.lower() not in TEXT_FILE_EXTENSIONS:
+                continue
+            if _is_excluded_by_glob(file_path, root=root_path, exclude_globs=profile.exclude_globs):
+                continue
+            content = read_text_file(file_path, session)
+            if not content:
+                continue
+            lines = content.splitlines()
+            evidences: list[Evidence] = []
+            for idx, line in enumerate(lines, start=1):
+                haystack = line.lower()
+                matches_in_line = [term for term in terms if term in haystack]
+                if not matches_in_line:
+                    continue
+                matched_term = max(matches_in_line, key=lambda item: (term_weights.get(item, 1), len(item)))
+                evidences.append(
+                    Evidence(
+                        line=idx,
+                        text=line.strip(),
+                        term=matched_term,
+                        source="content_match",
+                        weight=max(1, term_weights.get(matched_term, 1)),
+                    )
+                )
+                if len(evidences) >= 12:
+                    break
+            if not evidences:
+                continue
+            key = str(file_path.resolve())
+            results[key] = evidences
+            source_meta[key] = SourceMetadata(
+                source_type=source_type,
+                source_origin="framework_local_unversioned",
+                framework_id=profile.profile_id,
+                framework_version=profile.version,
+            )
+    return results, source_meta, warnings
+
+
 def collect_matches(
     root: Path,
     terms: list[str],
@@ -615,10 +709,13 @@ def collect_matches(
     *,
     index_entry_map: dict[str, dict[str, object]],
     term_weights: dict[str, int] | None = None,
-) -> dict[str, list[Evidence]]:
+    framework_profile: FrameworkProfile | None = None,
+) -> tuple[dict[str, list[Evidence]], dict[str, SourceMetadata], list[str]]:
     results: dict[str, list[Evidence]] = {}
+    source_meta: dict[str, SourceMetadata] = {}
+    warnings: list[str] = []
     if not terms:
-        return results
+        return results, source_meta, warnings
 
     weight_map = term_weights or {}
     repo_files = iter_repo_files(root, session)
@@ -650,6 +747,7 @@ def collect_matches(
                 break
         if evidences:
             results[rel] = evidences
+            source_meta[rel] = SourceMetadata(source_type="repo", source_origin="repo")
 
     # Path retrieval is a first-class channel.
     path_candidates = list(index_entry_map.keys()) if index_entry_map else rel_paths
@@ -711,6 +809,7 @@ def collect_matches(
             if symbol_hits:
                 existing = results.setdefault(rel, [])
                 existing.extend(symbol_hits[:3])
+                source_meta.setdefault(rel, SourceMetadata(source_type="repo", source_origin="repo"))
 
         # Summary retrieval from index enrichment metadata.
         for rel, entry in index_entry_map.items():
@@ -736,7 +835,21 @@ def collect_matches(
             if summary_hits:
                 existing = results.setdefault(rel, [])
                 existing.extend(summary_hits[:3])
-    return results
+                source_meta.setdefault(rel, SourceMetadata(source_type="repo", source_origin="repo"))
+    if framework_profile is not None:
+        framework_results, framework_source_meta, framework_warnings = _collect_framework_local_matches(
+            profile=framework_profile,
+            terms=terms,
+            session=session,
+            term_weights=weight_map,
+        )
+        warnings.extend(framework_warnings)
+        for path_key, evidences in framework_results.items():
+            if path_key in results:
+                continue
+            results[path_key] = evidences
+            source_meta[path_key] = framework_source_meta[path_key]
+    return results, source_meta, warnings
 
 
 def score_candidate(
@@ -807,6 +920,10 @@ def score_candidate(
         score += 2
     elif source_type == "framework":
         score -= 3 if prefer_repo_sources else 1
+    elif source_type == "web_docs":
+        score -= 4 if prefer_repo_sources else 2
+    elif source_type == "web_general":
+        score -= 5 if prefer_repo_sources else 3
     elif source_type == "external":
         score -= 4 if prefer_repo_sources else 2
 
@@ -822,10 +939,13 @@ def classify_source_type(
     *,
     path_class: str,
     index_entry: dict[str, object] | None,
+    source_meta: SourceMetadata | None = None,
 ) -> str:
+    if source_meta is not None:
+        return source_meta.source_type
     if index_entry and isinstance(index_entry.get("source_type"), str):
         raw = str(index_entry.get("source_type")).strip().lower()
-        if raw in {"repo", "framework", "external"}:
+        if raw in {"repo", "framework", "external", "web_docs", "web_general"}:
             return raw
 
     lowered = rel_path.lower()
@@ -847,7 +967,9 @@ def rank_candidates(
     target_scope: str | None,
     index_entry_map: dict[str, dict[str, object]],
     question_terms: set[str],
+    source_meta_map: dict[str, SourceMetadata] | None = None,
 ) -> list[Candidate]:
+    source_meta_map = source_meta_map or {}
     preliminary_source_types: dict[str, str] = {}
     for rel_path in matches:
         path_class = path_classes.get(rel_path, "normal")
@@ -855,6 +977,7 @@ def rank_candidates(
             rel_path,
             path_class=path_class,
             index_entry=index_entry_map.get(rel_path),
+            source_meta=source_meta_map.get(rel_path),
         )
     prefer_repo_sources = any(value == "repo" for value in preliminary_source_types.values())
 
@@ -862,6 +985,7 @@ def rank_candidates(
     for rel_path, evidences in matches.items():
         path_class = path_classes.get(rel_path, "normal")
         source_type = preliminary_source_types.get(rel_path, "repo")
+        source_meta = source_meta_map.get(rel_path)
         retrieval_sources = sorted({item.source for item in evidences})
         ranked.append(
             Candidate(
@@ -884,6 +1008,9 @@ def rank_candidates(
                 path_class=path_class,
                 retrieval_sources=retrieval_sources,
                 source_type=source_type,
+                source_origin=source_meta.source_origin if source_meta is not None else "repo",
+                framework_id=source_meta.framework_id if source_meta is not None else None,
+                framework_version=source_meta.framework_version if source_meta is not None else None,
             )
         )
     ranked.sort(key=lambda c: (c.score, len(c.evidences)), reverse=True)
@@ -897,6 +1024,7 @@ def rank_candidates_for_query(
     planner,
     index_entry_map: dict[str, dict[str, object]],
     path_classes: dict[str, str],
+    source_meta_map: dict[str, SourceMetadata] | None = None,
 ) -> list[Candidate]:
     return rank_candidates(
         matches,
@@ -904,6 +1032,7 @@ def rank_candidates_for_query(
         target_scope=planner.target_scope if planner is not None else None,
         index_entry_map=index_entry_map,
         question_terms=_question_terms_for_intent(question),
+        source_meta_map=source_meta_map,
     )
 
 
@@ -974,7 +1103,7 @@ def _top_candidate_snapshot(candidates: list[Candidate], limit: int = 3) -> list
 
 
 def _source_distribution(candidates: list[Candidate], limit: int = 8) -> dict[str, int]:
-    dist: dict[str, int] = {"repo": 0, "framework": 0, "external": 0}
+    dist: dict[str, int] = {"repo": 0, "framework": 0, "web_docs": 0, "web_general": 0, "external": 0}
     for item in candidates[:limit]:
         if item.source_type in dist:
             dist[item.source_type] += 1
@@ -1125,6 +1254,47 @@ def format_summary(question: str, candidates: list[Candidate]) -> str:
     return f"Most likely relevant files: {top_paths}."
 
 
+def _is_docs_like_candidate(candidate: Candidate) -> bool:
+    rel = str(candidate.path).lower()
+    if candidate.source_type in {"framework", "web_docs", "web_general"}:
+        return True
+    return rel.startswith("docs/") or rel.endswith(".md") or "/documentation/" in rel
+
+
+def apply_ask_preset(
+    candidates: list[Candidate],
+    preset: str | None,
+) -> tuple[list[Candidate], list[str], str]:
+    if not preset or preset == "auto":
+        return candidates, [], "auto"
+
+    warnings: list[str] = []
+    if preset == "repo":
+        filtered = [item for item in candidates if item.source_type == "repo"]
+        if not filtered:
+            warnings.append("ask:repo found no repo-only hits; falling back to mixed sources")
+            return candidates, warnings, "repo_fallback"
+        return filtered, warnings, "repo"
+
+    if preset == "docs":
+        filtered = [item for item in candidates if _is_docs_like_candidate(item)]
+        if not filtered:
+            warnings.append("ask:docs found no docs/framework hits; falling back to mixed sources")
+            return candidates, warnings, "docs_fallback"
+        return filtered, warnings, "docs"
+
+    if preset == "latest":
+        warnings.append("ask:latest web retrieval is not implemented yet; using docs-focused fallback")
+        filtered = [item for item in candidates if _is_docs_like_candidate(item)]
+        if not filtered:
+            warnings.append("ask:latest fallback found no docs/framework hits; falling back to mixed sources")
+            return candidates, warnings, "latest_fallback_mixed"
+        return filtered, warnings, "latest_fallback_docs"
+
+    warnings.append(f"unknown ask preset '{preset}'; using default query ranking")
+    return candidates, warnings, "unknown_fallback"
+
+
 def human_summary(summary: str, view: str) -> str:
     if is_full(view):
         return summary
@@ -1180,7 +1350,9 @@ def print_output(
             print(
                 f"{idx}. {candidate.path} "
                 f"(score={candidate.score}, class={candidate.path_class}, matches={len(candidate.evidences)}, "
-                f"sources={','.join(candidate.retrieval_sources)}, source_type={candidate.source_type})"
+                f"sources={','.join(candidate.retrieval_sources)}, source_type={candidate.source_type}, "
+                f"source_origin={candidate.source_origin}, framework_id={candidate.framework_id or '-'}, "
+                f"framework_version={candidate.framework_version or '-'})"
             )
         else:
             print(f"{idx}. {candidate.path} ({len(candidate.evidences)} matches)")
@@ -1200,7 +1372,10 @@ def print_output(
                     print(f"{candidate.path}: {evidence.text} [term={evidence.term}; source={evidence.source}]")
 
     print("\n--- Next Step ---")
-    print(f"Run: forge explain {candidates[0].path}")
+    if candidates[0].source_type == "repo":
+        print(f"Run: forge explain {candidates[0].path}")
+    else:
+        print("Top hit is non-repo source; narrow query for repo-local implementation details.")
 
 
 def enrich_detailed_context(
@@ -1247,6 +1422,10 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
 
     repo_root = Path(args.repo_root).resolve()
     question = normalize_question(request.payload)
+    ask_mode = bool(getattr(args, "ask_mode", False))
+    ask_command = str(getattr(args, "ask_command", "") or "")
+    ask_preset_requested = str(getattr(args, "ask_preset", "") or "") or None
+    ask_guided = bool(getattr(args, "ask_guided", False))
     policy_violations: list[dict[str, object]] = []
     if has_write_request_intent(question):
         violation = evaluate_action_eligibility(
@@ -1307,23 +1486,48 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     elif not is_json:
         print("Index: skipped in simple profile")
 
+    framework_registry = load_framework_registry(repo_root, session)
+    requested_framework_profile = getattr(args, "framework_profile", None)
+    framework_profile, framework_profile_id, framework_warnings = select_framework_profile(
+        framework_registry,
+        requested_framework_profile,
+    )
+    if not is_json and is_full(view):
+        if framework_profile is not None:
+            print(
+                "Framework profile: "
+                f"{framework_profile.profile_id} "
+                f"(version={framework_profile.version or '-'}, "
+                f"roots={len(framework_profile.framework_roots)}, docs_roots={len(framework_profile.framework_docs_roots)})"
+            )
+        elif framework_registry.exists:
+            print("Framework profile: none selected")
+
     if not is_json and is_full(view):
         print(f"Search terms: {', '.join(terms[:8])}" if terms else "Search terms: none")
     term_weights = build_term_weight_map(terms)
-    matches = collect_matches(
+    matches, source_meta_map, source_warnings = collect_matches(
         repo_root,
         terms,
         session,
         index_entry_map=index_entry_map,
         term_weights=term_weights,
+        framework_profile=framework_profile,
     )
+    framework_warnings.extend(source_warnings)
     candidates = rank_candidates_for_query(
         matches=matches,
         question=question,
         planner=planner,
         index_entry_map=index_entry_map,
         path_classes=path_classes,
+        source_meta_map=source_meta_map,
     )
+    explain_feedback = build_explain_feedback(question=question, candidates=candidates[:12])
+    candidates = rerank_with_explain_feedback(candidates, explain_feedback)
+    ask_warnings: list[str] = []
+    ask_preset_effective = "auto"
+    candidates, ask_warnings, ask_preset_effective = apply_ask_preset(candidates, ask_preset_requested)
     explain_feedback = build_explain_feedback(question=question, candidates=candidates[:12])
     candidates = rerank_with_explain_feedback(candidates, explain_feedback)
     feedback_by_path = {str(item.path): item for item in explain_feedback}
@@ -1343,6 +1547,10 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                     "term": item.term,
                     "source": item.source,
                     "retrieval_source": item.source,
+                    "source_type": candidate.source_type,
+                    "source_origin": candidate.source_origin,
+                    "framework_id": candidate.framework_id,
+                    "framework_version": candidate.framework_version,
                 }
             )
     orchestration_decisions = []
@@ -1539,7 +1747,16 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                     planner=planner,
                     index_entry_map=index_entry_map,
                     path_classes=path_classes,
+                    source_meta_map=source_meta_map,
                 )
+                explain_feedback = build_explain_feedback(question=question, candidates=candidates[:12])
+                candidates = rerank_with_explain_feedback(candidates, explain_feedback)
+                candidates, extra_ask_warnings, ask_preset_effective = apply_ask_preset(
+                    candidates,
+                    ask_preset_requested,
+                )
+                if extra_ask_warnings:
+                    ask_warnings.extend(extra_ask_warnings)
                 explain_feedback = build_explain_feedback(question=question, candidates=candidates[:12])
                 candidates = rerank_with_explain_feedback(candidates, explain_feedback)
                 action_applied = True
@@ -1815,8 +2032,25 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         uncertainty.append("Query action orchestration decision was rejected; deterministic fallback was used.")
     if orchestration_done_reason == "no_progress":
         uncertainty.append("Query action orchestration stopped after repeated no-progress iterations.")
+    if ask_guided:
+        ask_warnings.append("--guided is not implemented yet in this rollout; running deterministic ask preset flow")
+    deduped_ask_warnings: list[str] = []
+    seen_ask_warnings: set[str] = set()
+    for warning in ask_warnings:
+        norm = warning.strip()
+        if not norm or norm in seen_ask_warnings:
+            continue
+        seen_ask_warnings.add(norm)
+        deduped_ask_warnings.append(norm)
+    ask_warnings = deduped_ask_warnings
+    for warning in ask_warnings:
+        uncertainty.append(f"Ask preset warning: {warning}")
+    for warning in framework_warnings:
+        uncertainty.append(f"Framework profile warning: {warning}")
     next_step = (
         f"Run: forge explain {candidates[0].path}"
+        if candidates and candidates[0].source_type == "repo"
+        else "Top hit is non-repo source; narrow query for repo-local implementation details."
         if candidates
         else "Try a narrower question with a concrete symbol or path fragment."
     )
@@ -1844,6 +2078,9 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                 "matches": len(candidate.evidences),
                 "retrieval_sources": candidate.retrieval_sources,
                 "source_type": candidate.source_type,
+                "source_origin": candidate.source_origin,
+                "framework_id": candidate.framework_id,
+                "framework_version": candidate.framework_version,
             }
             for candidate in candidates[:8]
         ],
@@ -1890,6 +2127,28 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             llm_used=bool(llm_outcome.usage.get("used")) if llm_outcome is not None else False,
             evidence_count=len(evidence_payload),
         ),
+        "framework_profile": {
+            "requested": requested_framework_profile,
+            "resolved": framework_profile_id,
+            "config_path": str(framework_registry.config_path),
+            "config_present": framework_registry.exists,
+            "default_profile": framework_registry.default_profile,
+            "warnings": framework_warnings,
+            "framework_id": framework_profile.profile_id if framework_profile is not None else None,
+            "framework_version": framework_profile.version if framework_profile is not None else None,
+            "framework_roots": [str(path) for path in (framework_profile.framework_roots if framework_profile is not None else [])],
+            "framework_docs_roots": [
+                str(path) for path in (framework_profile.framework_docs_roots if framework_profile is not None else [])
+            ],
+        },
+        "ask": {
+            "enabled": ask_mode,
+            "command": ask_command if ask_mode else None,
+            "preset_requested": ask_preset_requested,
+            "preset_effective": ask_preset_effective,
+            "guided_requested": ask_guided,
+            "warnings": ask_warnings,
+        },
         "cross_lingual": {
             "source_language": cross_lingual.source_language,
             "mapped_terms": cross_lingual.mapped_terms,
@@ -2073,6 +2332,28 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             print(f"Code variants: {', '.join(planner.code_variants[:8])}")
         if planner_usage.get("fallback_reason"):
             print(f"Fallback: {planner_usage['fallback_reason']}")
+
+        if ask_mode:
+            print("\n--- Ask Preset ---")
+            print(f"Command: {ask_command or 'ask'}")
+            print(f"Preset requested: {ask_preset_requested or 'auto'}")
+            print(f"Preset effective: {ask_preset_effective}")
+            print(f"Guided requested: {ask_guided}")
+            for warning in ask_warnings[:8]:
+                print(f"Warning: {warning}")
+
+        print("\n--- Framework Profile ---")
+        print(f"Config present: {framework_registry.exists}")
+        print(f"Requested: {requested_framework_profile or '-'}")
+        print(f"Resolved: {framework_profile_id or '-'}")
+        if framework_profile is not None:
+            print(f"Framework ID: {framework_profile.profile_id}")
+            print(f"Framework version: {framework_profile.version or '-'}")
+            print(f"Framework roots: {len(framework_profile.framework_roots)}")
+            print(f"Framework docs roots: {len(framework_profile.framework_docs_roots)}")
+        if framework_warnings:
+            for warning in framework_warnings[:8]:
+                print(f"Warning: {warning}")
 
         print("\n--- Action Orchestration ---")
         print(f"Done reason: {orchestration_done_reason}")
