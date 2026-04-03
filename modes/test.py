@@ -6,16 +6,11 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.analysis_primitives import ResolvedTarget, resolve_file_or_symbol_target
+from core.analysis_primitives import load_index_path_class_map, prioritize_paths_by_index
 from core.capability_model import CommandRequest, Profile
 from core.effects import ExecutionSession
 from core.repo_io import iter_repo_files, read_text_file
-
-
-@dataclass
-class TestTarget:
-    path: Path
-    content: str
-    source: str  # file | symbol
 
 
 @dataclass
@@ -64,42 +59,11 @@ def parse_payload(payload: str) -> tuple[str, list[str]]:
     return raw_target, deduped
 
 
-def resolve_target(repo_root: Path, raw_target: str, session: ExecutionSession) -> TestTarget | None:
-    candidate = Path(raw_target)
-    abs_path = candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
-
-    try:
-        abs_path.relative_to(repo_root)
-    except ValueError:
-        abs_path = Path()
-
-    if abs_path and abs_path.is_file():
-        content = read_text_file(abs_path, session)
-        if content is not None:
-            return TestTarget(path=abs_path, content=content, source="file")
-
-    symbol = raw_target.strip()
-    if not symbol:
-        return None
-    def_patterns = [f"def {symbol}(", f"class {symbol}(", f"class {symbol}:"]
-    best_path: Path | None = None
-    best_content: str | None = None
-    best_score = 0
-    for path in iter_repo_files(repo_root, session):
-        content = read_text_file(path, session)
-        if not content:
-            continue
-        score = sum(content.count(pat) for pat in def_patterns) * 100 + content.count(symbol)
-        if score > best_score:
-            best_score = score
-            best_path = path
-            best_content = content
-    if best_path is None or best_content is None:
-        return None
-    return TestTarget(path=best_path, content=best_content, source="symbol")
-
-
-def find_test_files(repo_root: Path, session: ExecutionSession) -> list[Path]:
+def find_test_files(
+    repo_root: Path,
+    session: ExecutionSession,
+    path_classes: dict[str, str],
+) -> list[Path]:
     tests: list[Path] = []
     for path in iter_repo_files(repo_root, session):
         rel = path.relative_to(repo_root)
@@ -108,11 +72,21 @@ def find_test_files(repo_root: Path, session: ExecutionSession) -> list[Path]:
         named_as_test = name.startswith("test_") or name.endswith("_test.py")
         if in_test_dir or named_as_test:
             tests.append(path)
-    return tests
+    prioritized = prioritize_paths_by_index(
+        repo_root,
+        tests,
+        path_classes,
+        exclude_non_index_participating=False,
+    )
+    return prioritized if prioritized else tests
 
 
-def detect_conventions(repo_root: Path, session: ExecutionSession) -> TestConventions:
-    test_files = find_test_files(repo_root, session)
+def detect_conventions(
+    repo_root: Path,
+    session: ExecutionSession,
+    path_classes: dict[str, str],
+) -> TestConventions:
+    test_files = find_test_files(repo_root, session, path_classes)
     if not test_files:
         return TestConventions(
             framework="pytest",
@@ -162,7 +136,7 @@ def detect_conventions(repo_root: Path, session: ExecutionSession) -> TestConven
     )
 
 
-def likely_test_path(repo_root: Path, target: TestTarget, conventions: TestConventions) -> str:
+def likely_test_path(repo_root: Path, target: ResolvedTarget, conventions: TestConventions) -> str:
     rel = target.path.relative_to(repo_root)
     base = rel.stem
     test_dir = conventions.likely_test_dir.strip("/")
@@ -187,7 +161,7 @@ def extract_units(content: str, max_items: int) -> list[str]:
     return deduped[:max_items]
 
 
-def derive_cases(target: TestTarget, explicit_cases: list[str], profile: Profile) -> list[str]:
+def derive_cases(target: ResolvedTarget, explicit_cases: list[str], profile: Profile) -> list[str]:
     cases: list[str] = []
     for item in explicit_cases:
         cases.append(f"requested: {item}")
@@ -224,7 +198,12 @@ def derive_cases(target: TestTarget, explicit_cases: list[str], profile: Profile
     return deduped[:14]
 
 
-def build_draft_skeleton(target: TestTarget, conventions: TestConventions, cases: list[str], profile: Profile) -> str:
+def build_draft_skeleton(
+    target: ResolvedTarget,
+    conventions: TestConventions,
+    cases: list[str],
+    profile: Profile,
+) -> str:
     rel_name = target.path.stem
     test_names: list[str] = []
     for case in cases[: (3 if profile == Profile.STANDARD else 5)]:
@@ -266,13 +245,20 @@ def build_draft_skeleton(target: TestTarget, conventions: TestConventions, cases
 def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     repo_root = Path(args.repo_root).resolve()
     raw_target, explicit_cases = parse_payload(request.payload)
-    target = resolve_target(repo_root, raw_target, session)
+    target = resolve_file_or_symbol_target(repo_root, raw_target, session)
+    path_classes: dict[str, str] = {}
 
     print("=== FORGE TEST ===")
     print(f"Profile: {request.profile.value}")
     print(f"Target: {request.payload}")
     if explicit_cases:
         print(f"Explicit requested cases: {', '.join(explicit_cases)}")
+    if request.profile in {Profile.STANDARD, Profile.DETAILED}:
+        path_classes = load_index_path_class_map(repo_root, session)
+        if path_classes:
+            print("Index: loaded .forge/index.json")
+        else:
+            print("Index: not available, using direct repository scan only")
 
     if target is None:
         print("\n--- Summary ---")
@@ -281,7 +267,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         print('Run: forge query "where is the relevant logic implemented?"')
         return 0
 
-    conventions = detect_conventions(repo_root, session)
+    conventions = detect_conventions(repo_root, session, path_classes)
     test_location = likely_test_path(repo_root, target, conventions)
     cases = derive_cases(target, explicit_cases, request.profile)
 
@@ -308,6 +294,12 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         print("```python")
         print(skeleton)
         print("```")
+
+    print("\n--- Uncertainty ---")
+    if target.source == "symbol":
+        print("- Symbol target resolution is best-effort and may require manual confirmation.")
+    else:
+        print("- Proposed test cases are heuristic and should be reviewed before implementation.")
 
     print("\n--- Next Step ---")
     print(f"Run: forge explain {resolved}")

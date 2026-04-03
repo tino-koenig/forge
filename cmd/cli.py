@@ -24,6 +24,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=".",
         help="Repository root to analyze (default: current directory)",
     )
+    parser.add_argument(
+        "--output-format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format (default: text)",
+    )
     subparsers = parser.add_subparsers(dest="capability", required=True)
 
     index_parser = subparsers.add_parser("index", help="Build or refresh repository index")

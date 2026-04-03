@@ -1,13 +1,22 @@
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from core.capability_model import CommandRequest, EffectClass, Profile
+from core.analysis_primitives import (
+    ResolvedTarget,
+    find_related_files,
+    load_index_entry_map,
+    load_index_path_class_map,
+    path_class_weight,
+    prioritize_paths_by_index,
+    resolve_file_or_symbol_target,
+)
+from core.capability_model import CommandRequest, Profile
 from core.effects import ExecutionSession
-from core.repo_io import iter_repo_files, read_text_file
+from core.output_contracts import build_contract, emit_contract_json
+from core.repo_io import read_text_file
 
 
 @dataclass
@@ -17,99 +26,11 @@ class Evidence:
     text: str
 
 
-@dataclass
-class ExplainTarget:
-    path: Path
-    content: str
-    source: str
-
-
 ROLE_MARKERS = {
     "entrypoint": ["if __name__ == \"__main__\":", "argparse.ArgumentParser(", "main("],
     "configuration": [".yml", ".yaml", ".toml", ".ini", "config", "settings"],
     "support code": ["helper", "util", "common", "shared", "support"],
 }
-
-
-def load_index_file_entries(repo_root: Path, session: ExecutionSession) -> dict[str, dict[str, object]]:
-    index_path = repo_root / ".forge" / "index.json"
-    if not index_path.exists():
-        return {}
-
-    session.record_effect(EffectClass.READ_ONLY, f"read index data {index_path}")
-    try:
-        payload = json.loads(index_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return {}
-
-    files = payload.get("entries", {}).get("files", [])
-    if not isinstance(files, list):
-        return {}
-
-    by_path: dict[str, dict[str, object]] = {}
-    for entry in files:
-        if not isinstance(entry, dict):
-            continue
-        rel = entry.get("path")
-        if isinstance(rel, str):
-            by_path[rel] = entry
-    return by_path
-
-
-def resolve_as_file_target(repo_root: Path, raw_target: str, session: ExecutionSession) -> ExplainTarget | None:
-    candidate = Path(raw_target)
-    if candidate.is_absolute():
-        abs_path = candidate.resolve()
-    else:
-        abs_path = (repo_root / candidate).resolve()
-
-    try:
-        abs_path.relative_to(repo_root)
-    except ValueError:
-        return None
-
-    if not abs_path.is_file():
-        return None
-
-    content = read_text_file(abs_path, session)
-    if content is None:
-        return None
-    return ExplainTarget(path=abs_path, content=content, source="file")
-
-
-def resolve_as_symbol_target(repo_root: Path, symbol: str, session: ExecutionSession) -> ExplainTarget | None:
-    if not symbol.strip():
-        return None
-
-    name = symbol.strip()
-    definition_patterns = [
-        f"def {name}(",
-        f"class {name}(",
-        f"class {name}:",
-    ]
-    mention_pattern = name
-
-    best_path: Path | None = None
-    best_content: str | None = None
-    best_score = 0
-
-    for path in iter_repo_files(repo_root, session):
-        content = read_text_file(path, session)
-        if not content:
-            continue
-
-        definition_hits = sum(content.count(pattern) for pattern in definition_patterns)
-        mention_hits = content.count(mention_pattern)
-        score = (definition_hits * 100) + mention_hits
-
-        if score > best_score and score > 0:
-            best_path = path
-            best_content = content
-            best_score = score
-
-    if best_path is None or best_content is None:
-        return None
-    return ExplainTarget(path=best_path, content=best_content, source="symbol")
 
 
 def classify_role(rel_path: Path, content: str, index_entry: dict[str, object] | None) -> tuple[str, str]:
@@ -123,6 +44,9 @@ def classify_role(rel_path: Path, content: str, index_entry: dict[str, object] |
         return "configuration", "path/extension suggests configuration data"
 
     if index_entry:
+        path_class = index_entry.get("path_class")
+        if isinstance(path_class, str) and path_class_weight(path_class) >= 3:
+            return "implementation", "indexed as structurally preferred path"
         symbols = index_entry.get("top_level_symbols")
         if isinstance(symbols, list) and symbols:
             if len(symbols) >= 3:
@@ -135,7 +59,7 @@ def classify_role(rel_path: Path, content: str, index_entry: dict[str, object] |
 
 
 def gather_evidence_for_target(
-    target: ExplainTarget,
+    target: ResolvedTarget,
     request: CommandRequest,
 ) -> list[Evidence]:
     lines = target.content.splitlines()
@@ -182,23 +106,7 @@ def gather_evidence_for_target(
     return evidence[:12]
 
 
-def find_related_files(repo_root: Path, target_rel: Path, session: ExecutionSession) -> list[Path]:
-    stem = target_rel.stem.lower()
-    if not stem:
-        return []
-    related: list[Path] = []
-    for path in iter_repo_files(repo_root, session):
-        rel = path.relative_to(repo_root)
-        if rel == target_rel:
-            continue
-        if stem in rel.stem.lower():
-            related.append(rel)
-        if len(related) >= 5:
-            break
-    return related
-
-
-def uncertainty_notes(target: ExplainTarget, evidence: list[Evidence], profile: Profile) -> list[str]:
+def uncertainty_notes(target: ResolvedTarget, evidence: list[Evidence], profile: Profile) -> list[str]:
     notes: list[str] = []
     if target.source == "symbol":
         notes.append("target was resolved via best-effort symbol matching across files")
@@ -212,17 +120,21 @@ def uncertainty_notes(target: ExplainTarget, evidence: list[Evidence], profile: 
 def print_explanation(
     request: CommandRequest,
     repo_root: Path,
-    target: ExplainTarget,
+    target: ResolvedTarget,
     role: str,
     rationale: str,
     evidence: list[Evidence],
     related: list[Path],
     uncertainties: list[str],
+    index_status: str | None,
+    next_step: str,
 ) -> None:
     rel_target = target.path.relative_to(repo_root)
     print("=== FORGE EXPLAIN ===")
     print(f"Profile: {request.profile.value}")
     print(f"Target: {request.payload}")
+    if index_status:
+        print(f"Index: {index_status}")
     print(f"Resolved target: {rel_target} ({target.source})")
 
     print("\n--- Summary ---")
@@ -254,38 +166,102 @@ def print_explanation(
     else:
         print("No major uncertainty flags from current read pass.")
 
+    print("\n--- Next Step ---")
+    print(next_step)
+
 
 def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     repo_root = Path(args.repo_root).resolve()
     raw_target = request.payload.strip()
 
-    target = resolve_as_file_target(repo_root, raw_target, session)
-    if target is None:
-        target = resolve_as_symbol_target(repo_root, raw_target, session)
+    target = resolve_file_or_symbol_target(repo_root, raw_target, session)
 
     if target is None:
+        summary = "Target could not be resolved to a readable file or known symbol."
+        uncertainty = [
+            "no matching file path under repo root",
+            "no symbol-like match found in readable text files",
+        ]
+        next_step = 'Run: forge query "where is this symbol defined?"'
+        if args.output_format == "json":
+            contract = build_contract(
+                capability=request.capability.value,
+                profile=request.profile.value,
+                summary=summary,
+                evidence=[],
+                uncertainty=uncertainty,
+                next_step=next_step,
+                sections={"role_classification": None, "related_files": []},
+            )
+            emit_contract_json(contract)
+            return 0
         print("=== FORGE EXPLAIN ===")
         print(f"Profile: {request.profile.value}")
         print(f"Target: {request.payload}")
         print("\n--- Summary ---")
-        print("Target could not be resolved to a readable file or known symbol.")
+        print(summary)
         print("\n--- Uncertainty ---")
-        print("- no matching file path under repo root")
-        print("- no symbol-like match found in readable text files")
+        for note in uncertainty:
+            print(f"- {note}")
+        print("\n--- Next Step ---")
+        print(next_step)
         return 0
 
     rel_target = target.path.relative_to(repo_root)
     index_entries = {}
+    path_classes: dict[str, str] = {}
+    index_status: str | None = None
     if request.profile in {Profile.STANDARD, Profile.DETAILED}:
-        index_entries = load_index_file_entries(repo_root, session)
+        index_entries = load_index_entry_map(repo_root, session)
+        path_classes = load_index_path_class_map(repo_root, session)
+        if path_classes:
+            index_status = "loaded .forge/index.json"
+        else:
+            index_status = "not available, using direct repository scan only"
     index_entry = index_entries.get(str(rel_target))
 
     role, rationale = classify_role(rel_target, target.content, index_entry)
     evidence = gather_evidence_for_target(target, request)
     related: list[Path] = []
     if request.profile in {Profile.STANDARD, Profile.DETAILED}:
-        related = find_related_files(repo_root, rel_target, session)
+        related_rel = find_related_files(repo_root, rel_target, session, limit=10)
+        related_abs = [repo_root / rel for rel in related_rel]
+        prioritized = prioritize_paths_by_index(
+            repo_root,
+            related_abs,
+            path_classes,
+            exclude_non_index_participating=True,
+        )
+        if not prioritized:
+            prioritized = related_abs
+        related = [path.relative_to(repo_root) for path in prioritized[:5]]
     uncertainties = uncertainty_notes(target, evidence, request.profile)
+    next_step = f"Run: forge review {rel_target}"
+    evidence_payload = [
+        {
+            "path": str(item.path.relative_to(repo_root)),
+            "line": item.line,
+            "text": item.text,
+        }
+        for item in evidence
+    ]
+    sections = {
+        "role_classification": {"role": role, "reason": rationale},
+        "related_files": [str(path) for path in related],
+        "resolved_target": str(rel_target),
+    }
+    if args.output_format == "json":
+        contract = build_contract(
+            capability=request.capability.value,
+            profile=request.profile.value,
+            summary=f"{rel_target} is primarily {role}.",
+            evidence=evidence_payload,
+            uncertainty=uncertainties,
+            next_step=next_step,
+            sections=sections,
+        )
+        emit_contract_json(contract)
+        return 0
 
     print_explanation(
         request=request,
@@ -296,5 +272,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         evidence=evidence,
         related=related,
         uncertainties=uncertainties,
+        index_status=index_status,
+        next_step=next_step,
     )
     return 0

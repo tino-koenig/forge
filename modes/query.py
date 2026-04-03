@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from core.capability_model import CommandRequest, EffectClass, Profile
+from core.analysis_primitives import load_index_path_class_map, path_class_weight
+from core.capability_model import CommandRequest, Profile
 from core.effects import ExecutionSession
+from core.output_contracts import build_contract, emit_contract_json
 from core.repo_io import iter_repo_files, read_text_file
 
 
@@ -88,34 +89,6 @@ def derive_search_terms(question: str, profile: Profile) -> list[str]:
     return deduped[:15]
 
 
-def load_index_path_classes(repo_root: Path, session: ExecutionSession) -> dict[str, str]:
-    index_file = repo_root / ".forge" / "index.json"
-    if not index_file.exists():
-        return {}
-
-    session.record_effect(EffectClass.READ_ONLY, f"read index metadata {index_file}")
-    try:
-        raw = index_file.read_text(encoding="utf-8")
-        payload = json.loads(raw)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return {}
-
-    entries = payload.get("entries", {})
-    files = entries.get("files", [])
-    if not isinstance(files, list):
-        return {}
-
-    mapping: dict[str, str] = {}
-    for entry in files:
-        if not isinstance(entry, dict):
-            continue
-        path = entry.get("path")
-        path_class = entry.get("path_class", "normal")
-        if isinstance(path, str) and isinstance(path_class, str):
-            mapping[path] = path_class
-    return mapping
-
-
 def collect_matches(
     root: Path,
     terms: list[str],
@@ -151,13 +124,7 @@ def collect_matches(
 def score_candidate(evidences: list[Evidence], path_class: str) -> int:
     unique_terms = {e.term for e in evidences}
     base = len(evidences) + (len(unique_terms) * 2)
-    class_bonus = {
-        "preferred": 3,
-        "normal": 0,
-        "low_priority": -1,
-        "index_exclude": -3,
-        "hard_ignore": -5,
-    }.get(path_class, 0)
+    class_bonus = path_class_weight(path_class)
     return base + class_bonus
 
 
@@ -241,9 +208,11 @@ def enrich_detailed_context(
     return details
 
 def run(request: CommandRequest, args, session: ExecutionSession) -> int:
-    print("=== FORGE QUERY ===")
-    print(f"Profile: {request.profile.value}")
-    print(f"Question: {request.payload}")
+    is_json = args.output_format == "json"
+    if not is_json:
+        print("=== FORGE QUERY ===")
+        print(f"Profile: {request.profile.value}")
+        print(f"Question: {request.payload}")
 
     repo_root = Path(args.repo_root).resolve()
     question = normalize_question(request.payload)
@@ -251,28 +220,83 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
 
     path_classes: dict[str, str] = {}
     if request.profile in {Profile.STANDARD, Profile.DETAILED}:
-        path_classes = load_index_path_classes(repo_root, session)
-        if path_classes:
-            print("Index: loaded .forge/index.json")
-        else:
-            print("Index: not available, using direct repository scan only")
-    else:
+        path_classes = load_index_path_class_map(repo_root, session)
+        if not is_json:
+            if path_classes:
+                print("Index: loaded .forge/index.json")
+            else:
+                print("Index: not available, using direct repository scan only")
+    elif not is_json:
         print("Index: skipped in simple profile")
 
-    print(f"Search terms: {', '.join(terms[:8])}" if terms else "Search terms: none")
+    if not is_json:
+        print(f"Search terms: {', '.join(terms[:8])}" if terms else "Search terms: none")
     matches = collect_matches(
         repo_root,
         terms,
         session,
     )
     candidates = rank_candidates(matches, path_classes=path_classes)
+    detailed_lines: list[str] = []
+    if request.profile == Profile.DETAILED and candidates:
+        detailed_lines = enrich_detailed_context(repo_root, candidates, session)
+
+    summary = format_summary(question, candidates)
+    evidence_payload: list[dict[str, object]] = []
+    for candidate in candidates[:5]:
+        for item in candidate.evidences[:3]:
+            evidence_payload.append(
+                {
+                    "path": str(candidate.path),
+                    "line": item.line,
+                    "text": item.text,
+                    "term": item.term,
+                }
+            )
+    uncertainty = ["Results are based on lexical matching and heuristic ranking."]
+    if request.profile == Profile.SIMPLE:
+        uncertainty.append("Simple profile does not use index-assisted prioritization.")
+    if not candidates:
+        uncertainty.append("No strong candidate files were detected.")
+    next_step = (
+        f"Run: forge explain {candidates[0].path}"
+        if candidates
+        else "Try a narrower question with a concrete symbol or path fragment."
+    )
+    sections: dict[str, object] = {
+        "likely_locations": [
+            {
+                "path": str(candidate.path),
+                "score": candidate.score,
+                "path_class": candidate.path_class,
+                "matches": len(candidate.evidences),
+            }
+            for candidate in candidates[:8]
+        ],
+    }
+    if detailed_lines:
+        sections["detailed_context"] = detailed_lines[:20]
+
+    if is_json:
+        contract = build_contract(
+            capability=request.capability.value,
+            profile=request.profile.value,
+            summary=summary,
+            evidence=evidence_payload,
+            uncertainty=uncertainty,
+            next_step=next_step,
+            sections=sections,
+        )
+        emit_contract_json(contract)
+        return 0
 
     print_output(question, candidates)
+    print("\n--- Uncertainty ---")
+    for note in uncertainty:
+        print(f"- {note}")
 
-    if request.profile == Profile.DETAILED and candidates:
-        detailed = enrich_detailed_context(repo_root, candidates, session)
-        if detailed:
+    if detailed_lines:
             print("\n--- Detailed Context ---")
-            for line in detailed[:20]:
+            for line in detailed_lines[:20]:
                 print(line)
     return 0

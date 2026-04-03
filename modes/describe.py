@@ -1,21 +1,18 @@
 from __future__ import annotations
 
-import json
 import re
 from collections import Counter
-from dataclasses import dataclass
 from pathlib import Path
 
-from core.capability_model import CommandRequest, EffectClass, Profile
+from core.analysis_primitives import (
+    ResolvedTarget,
+    list_directory_files,
+    load_index_payload,
+    resolve_describe_target,
+)
+from core.capability_model import CommandRequest, Profile
 from core.effects import ExecutionSession
 from core.repo_io import iter_repo_files, read_text_file
-
-
-@dataclass
-class DescribeTarget:
-    kind: str  # repo | directory | file | symbol
-    path: Path | None
-    source: str
 
 
 LANGUAGE_BY_EXTENSION = {
@@ -36,75 +33,6 @@ LANGUAGE_BY_EXTENSION = {
     ".toml": "TOML",
     ".json": "JSON",
 }
-
-
-def load_index(repo_root: Path, session: ExecutionSession) -> dict[str, object] | None:
-    index_path = repo_root / ".forge" / "index.json"
-    if not index_path.exists():
-        return None
-    session.record_effect(EffectClass.READ_ONLY, f"read index {index_path}")
-    try:
-        raw = index_path.read_text(encoding="utf-8")
-        return json.loads(raw)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return None
-
-
-def resolve_target(repo_root: Path, raw_target: str, session: ExecutionSession) -> DescribeTarget:
-    if not raw_target.strip():
-        return DescribeTarget(kind="repo", path=repo_root, source="implicit")
-
-    candidate = Path(raw_target.strip())
-    abs_path = candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
-
-    try:
-        abs_path.relative_to(repo_root)
-    except ValueError:
-        abs_path = Path()
-
-    if abs_path and abs_path.is_dir():
-        return DescribeTarget(kind="directory", path=abs_path, source="path")
-    if abs_path and abs_path.is_file():
-        return DescribeTarget(kind="file", path=abs_path, source="path")
-
-    # Symbol fallback
-    symbol = raw_target.strip()
-    definition_patterns = [f"def {symbol}(", f"class {symbol}(", f"class {symbol}:"]
-    best_path: Path | None = None
-    best_score = 0
-    for path in iter_repo_files(repo_root, session):
-        content = read_text_file(path, session)
-        if not content:
-            continue
-        definition_hits = sum(content.count(pat) for pat in definition_patterns)
-        mentions = content.count(symbol)
-        score = definition_hits * 100 + mentions
-        if score > best_score:
-            best_score = score
-            best_path = path
-    if best_path is not None:
-        return DescribeTarget(kind="symbol", path=best_path, source="symbol")
-
-    return DescribeTarget(kind="repo", path=repo_root, source="fallback")
-
-
-def collect_file_paths(repo_root: Path, session: ExecutionSession) -> list[Path]:
-    return iter_repo_files(repo_root, session)
-
-
-def list_directory_files(directory: Path, repo_root: Path, session: ExecutionSession) -> list[Path]:
-    session.record_effect(EffectClass.READ_ONLY, f"scan directory {directory}")
-    paths: list[Path] = []
-    for path in directory.rglob("*"):
-        if not path.is_file():
-            continue
-        try:
-            path.relative_to(repo_root)
-        except ValueError:
-            continue
-        paths.append(path)
-    return paths
-
 
 def detect_languages(files: list[Path]) -> list[str]:
     counter: Counter[str] = Counter()
@@ -152,6 +80,47 @@ def top_directories(files: list[Path], repo_root: Path, depth: int = 1) -> list[
         key = "." if len(parts) == 1 else "/".join(parts[:depth])
         counter[key] += 1
     return counter.most_common(8)
+
+
+def directories_from_index_payload(index_payload: dict[str, object] | None) -> list[tuple[str, int]]:
+    if not index_payload:
+        return []
+    entries = index_payload.get("entries", {})
+    directories = entries.get("directories", []) if isinstance(entries, dict) else []
+    if not isinstance(directories, list):
+        return []
+
+    ranked: list[tuple[str, int]] = []
+    for entry in directories:
+        if not isinstance(entry, dict):
+            continue
+        path = entry.get("path")
+        file_count = entry.get("child_file_count", 0)
+        if not isinstance(path, str) or path in {"."}:
+            continue
+        if not isinstance(file_count, int):
+            file_count = 0
+        ranked.append((path, file_count))
+    ranked.sort(key=lambda item: item[1], reverse=True)
+    return ranked
+
+
+def files_from_index_payload(repo_root: Path, index_payload: dict[str, object] | None) -> list[Path]:
+    if not index_payload:
+        return []
+    entries = index_payload.get("entries", {})
+    files = entries.get("files", []) if isinstance(entries, dict) else []
+    if not isinstance(files, list):
+        return []
+
+    results: list[Path] = []
+    for entry in files:
+        if not isinstance(entry, dict):
+            continue
+        rel = entry.get("path")
+        if isinstance(rel, str):
+            results.append(repo_root / rel)
+    return results
 
 
 def find_important_files(files: list[Path], repo_root: Path) -> list[Path]:
@@ -205,9 +174,7 @@ def infer_repo_summary(
     return f"Repository appears to be a {lang_part} project with {len(files)} readable files."
 
 
-def infer_target_summary(target: DescribeTarget, repo_root: Path, session: ExecutionSession) -> str:
-    if target.path is None:
-        return "Target could not be resolved."
+def infer_target_summary(target: ResolvedTarget, repo_root: Path, session: ExecutionSession) -> str:
     rel = target.path.relative_to(repo_root)
     if target.kind == "directory":
         return f"{rel} is a directory-level subsystem with grouped repository content."
@@ -229,10 +196,13 @@ def print_repo_description(
     files: list[Path],
     request: CommandRequest,
     session: ExecutionSession,
+    index_payload: dict[str, object] | None,
 ) -> str | None:
     languages = detect_languages(files)
     frameworks = detect_framework_hints(files, repo_root, session, limit=80 if request.profile != Profile.SIMPLE else 25)
-    directories = top_directories(files, repo_root)
+    directories = directories_from_index_payload(index_payload)
+    if not directories:
+        directories = top_directories(files, repo_root)
     important = find_important_files(files, repo_root)
     summary = infer_repo_summary(repo_root, files, languages, session)
 
@@ -277,16 +247,11 @@ def print_repo_description(
 
 
 def print_target_description(
-    target: DescribeTarget,
+    target: ResolvedTarget,
     repo_root: Path,
     request: CommandRequest,
     session: ExecutionSession,
 ) -> None:
-    if target.path is None:
-        print("\n--- Summary ---")
-        print("Target could not be resolved.")
-        return
-
     rel = target.path.relative_to(repo_root)
     print("\n--- Summary ---")
     print(infer_target_summary(target, repo_root, session))
@@ -342,7 +307,7 @@ def print_target_description(
 
 def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     repo_root = Path(args.repo_root).resolve()
-    target = resolve_target(repo_root, request.payload, session)
+    target = resolve_describe_target(repo_root, request.payload, session)
 
     print("=== FORGE DESCRIBE ===")
     print(f"Profile: {request.profile.value}")
@@ -351,7 +316,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
 
     index = None
     if request.profile in {Profile.STANDARD, Profile.DETAILED}:
-        index = load_index(repo_root, session)
+        index = load_index_payload(repo_root, session)
     if index is not None:
         print("Index: loaded .forge/index.json")
     elif request.profile in {Profile.STANDARD, Profile.DETAILED}:
@@ -359,10 +324,20 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
 
     next_step: str | None = None
     if target.kind == "repo":
-        files = collect_file_paths(repo_root, session)
-        next_step = print_repo_description(repo_root, files, request, session)
+        files = files_from_index_payload(repo_root, index)
+        if not files:
+            files = iter_repo_files(repo_root, session)
+        next_step = print_repo_description(repo_root, files, request, session, index)
     else:
         print_target_description(target, repo_root, request, session)
+
+    print("\n--- Uncertainty ---")
+    if target.kind == "symbol":
+        print("- Symbol targets are resolved via best-effort matching.")
+    elif target.kind == "repo" and index is None and request.profile in {Profile.STANDARD, Profile.DETAILED}:
+        print("- Index not available; summary is based on direct repository scan.")
+    else:
+        print("- Summary is heuristic and based on visible structure/signals.")
 
     print("\n--- Next Step ---")
     if target.kind == "repo":
