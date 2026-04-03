@@ -28,4 +28,9 @@ htmlcov/
 .DS_Store
 
 # Forge local data
-.forge/
+.forge/*
+!.forge/config.toml
+
+# Local environment secrets
+.env
+.env.*

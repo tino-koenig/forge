@@ -310,7 +310,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         task=request.payload,
         deterministic_summary=deterministic_summary,
         evidence=evidence_payload,
-        settings=resolve_settings(args),
+        settings=resolve_settings(args, repo_root),
     )
 
     print("\n--- Summary ---")
@@ -349,6 +349,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     print(f"Mode: {llm_outcome.usage['mode']}")
     print(f"Used: {llm_outcome.usage['used']}")
     print(f"Provider: {llm_outcome.usage['provider'] or 'none'}")
+    print(f"Base URL: {llm_outcome.usage['base_url'] or 'none'}")
     print(f"Model: {llm_outcome.usage['model'] or 'none'}")
     if llm_outcome.usage.get("fallback_reason"):
         print(f"Fallback: {llm_outcome.usage['fallback_reason']}")

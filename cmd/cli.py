@@ -44,6 +44,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--llm-model",
         help="Explicit LLM model override (or FORGE_LLM_MODEL)",
     )
+    parser.add_argument(
+        "--llm-base-url",
+        help="Explicit OpenAI-compatible base URL override (or FORGE_LLM_BASE_URL)",
+    )
+    parser.add_argument(
+        "--llm-timeout-s",
+        type=float,
+        help="Explicit LLM timeout in seconds (or FORGE_LLM_TIMEOUT_S)",
+    )
     subparsers = parser.add_subparsers(dest="capability", required=True)
 
     index_parser = subparsers.add_parser("index", help="Build or refresh repository index")

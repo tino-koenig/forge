@@ -179,9 +179,41 @@ Defaults remain conservative:
 Use explicit CLI controls:
 
 ```bash
-forge --llm-mode auto --llm-provider mock query standard "where is compute_price"
+forge --llm-mode auto --llm-provider openai_compatible --llm-base-url http://localhost:4000/v1 --llm-model gpt-4o-mini query standard "where is compute_price"
 forge --llm-mode off review detailed src/controller.py
 ```
+
+Repo-local configuration is loaded from `.forge/config.toml`:
+
+```toml
+[llm]
+provider = "openai_compatible"
+
+[llm.openai_compatible]
+base_url = "http://localhost:4000/v1"
+model = "gpt-4o-mini"
+api_key_env = "FORGE_LLM_API_KEY"
+timeout_s = 30
+
+[llm.request]
+context_budget_tokens = 12000
+max_output_tokens = 700
+temperature = 0.2
+
+[llm.prompt]
+system_template = "prompts/system/default_read_only.txt"
+profile = "strict_read_only"
+```
+
+Precedence:
+- CLI flags
+- environment variables
+- `.forge/config.toml`
+- internal defaults
+
+Secrets:
+- store API keys in environment variables (for example loaded via `.env`)
+- do not store raw secrets in `.forge/config.toml`
 
 Notes:
 - deterministic evidence collection always runs first

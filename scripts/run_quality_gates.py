@@ -22,13 +22,19 @@ class GateError(RuntimeError):
     pass
 
 
-def run_cmd(args: list[str], cwd: Path, expect_ok: bool = True) -> subprocess.CompletedProcess[str]:
+def run_cmd(
+    args: list[str],
+    cwd: Path,
+    expect_ok: bool = True,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     proc = subprocess.run(
         args,
         cwd=cwd,
         text=True,
         capture_output=True,
         check=False,
+        env=env,
     )
     if expect_ok and proc.returncode != 0:
         raise GateError(
@@ -184,6 +190,124 @@ def gate_llm_path(repo_root: Path) -> None:
         )
 
 
+def gate_openai_compatible_provider(repo_root: Path) -> None:
+    env = os.environ.copy()
+    env["FORGE_LLM_PROVIDER"] = "openai_compatible"
+    env["FORGE_LLM_BASE_URL"] = "mock://openai/v1"
+    env["FORGE_LLM_MODEL"] = "gpt-test"
+    env["FORGE_LLM_API_KEY"] = "test-key"
+
+    payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "query",
+                "standard",
+                "compute_price",
+            ],
+            cwd=ROOT,
+            env=env,
+        ).stdout
+    )
+    usage = payload.get("sections", {}).get("llm_usage", {})
+    assert_true(usage.get("provider") == "openai_compatible", "expected openai_compatible provider")
+    assert_true(usage.get("used") is True, "expected openai_compatible provider usage")
+    assert_true(
+        str(payload.get("summary", "")).startswith("Refined via openai_compatible provider"),
+        "expected summary from openai-compatible completion",
+    )
+
+
+def gate_config_toml_fallback(repo_root: Path) -> None:
+    forge_dir = repo_root / ".forge"
+    forge_dir.mkdir(parents=True, exist_ok=True)
+    (forge_dir / "config.toml").write_text(
+        (
+            "[llm]\n"
+            'provider = "openai_compatible"\n'
+            "[llm.openai_compatible]\n"
+            'base_url = "http://127.0.0.1:1/v1"\n'
+            'model = "gpt-test"\n'
+            'api_key_env = "FORGE_MISSING_KEY"\n'
+            "timeout_s = 1\n"
+        ),
+        encoding="utf-8",
+    )
+
+    payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "query",
+                "standard",
+                "compute_price",
+            ],
+            cwd=ROOT,
+            env=os.environ.copy(),
+        ).stdout
+    )
+    usage = payload.get("sections", {}).get("llm_usage", {})
+    assert_true(usage.get("used") is False, "misconfigured provider should fallback to deterministic path")
+    reason = str(usage.get("fallback_reason", ""))
+    assert_true("missing API key" in reason or "missing API key from env var" in reason, "expected missing key fallback")
+
+
+def gate_config_precedence(repo_root: Path) -> None:
+    forge_dir = repo_root / ".forge"
+    forge_dir.mkdir(parents=True, exist_ok=True)
+    (forge_dir / "config.toml").write_text(
+        (
+            "[llm]\n"
+            'provider = "openai_compatible"\n'
+            "[llm.openai_compatible]\n"
+            'base_url = "mock://openai/v1"\n'
+            'model = "model-from-toml"\n'
+            'api_key_env = "FORGE_LLM_API_KEY"\n'
+            "timeout_s = 2\n"
+        ),
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["FORGE_LLM_MODEL"] = "model-from-env"
+    env["FORGE_LLM_API_KEY"] = "test-key"
+
+    payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--llm-model",
+                "model-from-cli",
+                "--repo-root",
+                str(repo_root),
+                "query",
+                "standard",
+                "compute_price",
+            ],
+            cwd=ROOT,
+            env=env,
+        ).stdout
+    )
+    usage = payload.get("sections", {}).get("llm_usage", {})
+    assert_true(usage.get("used") is True, "precedence test should still use provider")
+    assert_true(usage.get("model") == "model-from-cli", "CLI model must override env and TOML")
+    sources = usage.get("config_source", {})
+    assert_true(sources.get("model") == "cli", "model source should be cli")
+    assert_true(sources.get("base_url") == "toml", "base_url source should be toml")
+
+
 def gate_evidence_quality(repo_root: Path) -> None:
     query_payload = parse_json_output(
         run_cmd(
@@ -259,6 +383,9 @@ def run_all_gates() -> None:
         gate_behavior_smoke(temp_repo)
         gate_output_contract(temp_repo)
         gate_llm_path(temp_repo)
+        gate_openai_compatible_provider(temp_repo)
+        gate_config_toml_fallback(temp_repo)
+        gate_config_precedence(temp_repo)
         gate_evidence_quality(temp_repo)
         gate_effect_boundaries(temp_repo)
         gate_fallback_with_and_without_index(temp_repo)

@@ -253,7 +253,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         "resolved_target": str(rel_target),
     }
     deterministic_summary = f"{rel_target} is primarily {role}."
-    llm_settings = resolve_settings(args)
+    llm_settings = resolve_settings(args, repo_root)
     llm_outcome = maybe_refine_summary(
         capability=request.capability,
         profile=request.profile,
@@ -301,6 +301,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     print(f"Mode: {llm_outcome.usage['mode']}")
     print(f"Used: {llm_outcome.usage['used']}")
     print(f"Provider: {llm_outcome.usage['provider'] or 'none'}")
+    print(f"Base URL: {llm_outcome.usage['base_url'] or 'none'}")
     print(f"Model: {llm_outcome.usage['model'] or 'none'}")
     if llm_outcome.usage.get("fallback_reason"):
         print(f"Fallback: {llm_outcome.usage['fallback_reason']}")

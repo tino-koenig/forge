@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
-import os
 from string import Template
+from urllib import error, request
 
 from core.capability_model import Capability, Profile
+from core.config import ResolvedLLMConfig, resolve_llm_config
 
 
 class LLMInvocationPolicy(str):
@@ -35,13 +37,6 @@ POLICY_MATRIX: dict[tuple[Capability, Profile], str] = {
 }
 
 
-@dataclass(frozen=True)
-class LLMSettings:
-    mode: str
-    provider: str | None
-    model: str | None
-
-
 @dataclass
 class LLMOutcome:
     summary: str
@@ -53,12 +48,26 @@ def policy_for(capability: Capability, profile: Profile) -> str:
     return POLICY_MATRIX.get((capability, profile), LLMInvocationPolicy.OFF)
 
 
-def resolve_settings(args) -> LLMSettings:
-    provider = args.llm_provider or os.environ.get("FORGE_LLM_PROVIDER")
-    model = args.llm_model or os.environ.get("FORGE_LLM_MODEL")
-    if provider == "mock" and not model:
-        model = "forge-mock-v1"
-    return LLMSettings(mode=args.llm_mode, provider=provider, model=model)
+def resolve_settings(args, repo_root: Path) -> ResolvedLLMConfig:
+    config = resolve_llm_config(args, repo_root)
+    if config.provider == "mock" and not config.model:
+        return ResolvedLLMConfig(
+            mode=config.mode,
+            provider=config.provider,
+            base_url=config.base_url,
+            model="forge-mock-v1",
+            timeout_s=config.timeout_s,
+            api_key_env=config.api_key_env,
+            api_key=config.api_key,
+            context_budget_tokens=config.context_budget_tokens,
+            max_output_tokens=config.max_output_tokens,
+            temperature=config.temperature,
+            prompt_profile=config.prompt_profile,
+            system_template_path=config.system_template_path,
+            source=config.source,
+            validation_error=config.validation_error,
+        )
+    return config
 
 
 def _template_path(capability: Capability) -> Path:
@@ -72,17 +81,24 @@ def _render_prompt(
     task: str,
     deterministic_summary: str,
     evidence: list[dict[str, object]],
+    context_budget_tokens: int,
 ) -> tuple[str | None, str | None]:
     path = _template_path(capability)
     if not path.exists():
         return None, f"missing prompt template: {path}"
 
     lines: list[str] = []
-    for item in evidence[:12]:
+    char_budget = max(context_budget_tokens * 4, 800)
+    used_chars = 0
+    for item in evidence[:40]:
         path_value = item.get("path", "?")
         line_value = item.get("line", "?")
         text = str(item.get("text", "")).strip()
-        lines.append(f"- {path_value}:{line_value}: {text}")
+        candidate = f"- {path_value}:{line_value}: {text}"
+        used_chars += len(candidate)
+        if used_chars > char_budget:
+            break
+        lines.append(candidate)
     evidence_block = "\n".join(lines) if lines else "- no explicit evidence lines supplied"
 
     raw = path.read_text(encoding="utf-8")
@@ -94,6 +110,16 @@ def _render_prompt(
         evidence_block=evidence_block,
     )
     return prompt, None
+
+
+def _load_system_prompt(settings: ResolvedLLMConfig) -> tuple[str | None, str | None]:
+    path = settings.system_template_path
+    if not path.exists():
+        return None, f"missing system template: {path}"
+    try:
+        return path.read_text(encoding="utf-8").strip(), None
+    except OSError as exc:
+        return None, f"unable to read system template: {exc}"
 
 
 def _mock_complete(
@@ -110,6 +136,67 @@ def _mock_complete(
     return f"{deterministic_summary} Primary evidence anchor: {first_path}."
 
 
+def _openai_compatible_complete(
+    *,
+    settings: ResolvedLLMConfig,
+    system_prompt: str,
+    user_prompt: str,
+) -> str:
+    if not settings.base_url:
+        raise RuntimeError("missing base_url for openai_compatible provider")
+    if not settings.model:
+        raise RuntimeError("missing model for openai_compatible provider")
+    if not settings.api_key:
+        raise RuntimeError(f"missing API key from env var '{settings.api_key_env}'")
+
+    base_url = settings.base_url.rstrip("/")
+    if base_url.startswith("mock://"):
+        return f"Refined via openai_compatible provider using model {settings.model}."
+    endpoint = f"{base_url}/chat/completions"
+    payload = {
+        "model": settings.model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": settings.temperature,
+        "max_tokens": settings.max_output_tokens,
+    }
+    body = json.dumps(payload).encode("utf-8")
+    req = request.Request(
+        endpoint,
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {settings.api_key}",
+        },
+        method="POST",
+    )
+    try:
+        with request.urlopen(req, timeout=settings.timeout_s) as resp:
+            raw = resp.read().decode("utf-8")
+    except error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"http {exc.code}: {detail}") from exc
+    except error.URLError as exc:
+        raise RuntimeError(f"network error: {exc.reason}") from exc
+
+    parsed = json.loads(raw)
+    choices = parsed.get("choices", [])
+    if not isinstance(choices, list) or not choices:
+        raise RuntimeError("openai-compatible response missing choices")
+    first = choices[0]
+    if not isinstance(first, dict):
+        raise RuntimeError("openai-compatible response choice malformed")
+    message = first.get("message", {})
+    if not isinstance(message, dict):
+        raise RuntimeError("openai-compatible response message malformed")
+    content = message.get("content")
+    if not isinstance(content, str) or not content.strip():
+        raise RuntimeError("openai-compatible response missing content")
+    return content.strip()
+
+
 def maybe_refine_summary(
     *,
     capability: Capability,
@@ -117,17 +204,24 @@ def maybe_refine_summary(
     task: str,
     deterministic_summary: str,
     evidence: list[dict[str, object]],
-    settings: LLMSettings,
+    settings: ResolvedLLMConfig,
 ) -> LLMOutcome:
     policy = policy_for(capability, profile)
     usage: dict[str, object] = {
         "policy": policy,
         "mode": settings.mode,
         "provider": settings.provider,
+        "base_url": settings.base_url,
         "model": settings.model,
+        "prompt_profile": settings.prompt_profile,
+        "system_template": str(settings.system_template_path),
+        "context_budget_tokens": settings.context_budget_tokens,
+        "max_output_tokens": settings.max_output_tokens,
+        "temperature": settings.temperature,
         "attempted": False,
         "used": False,
         "fallback_reason": None,
+        "config_source": settings.source,
         "prompt_template": str(_template_path(capability).relative_to(Path(__file__).resolve().parents[1])),
     }
     uncertainty_notes: list[str] = []
@@ -143,6 +237,9 @@ def maybe_refine_summary(
     if settings.provider is None:
         usage["fallback_reason"] = "no llm provider configured"
         return LLMOutcome(summary=deterministic_summary, usage=usage, uncertainty_notes=uncertainty_notes)
+    if settings.validation_error:
+        usage["fallback_reason"] = f"config validation error: {settings.validation_error}"
+        return LLMOutcome(summary=deterministic_summary, usage=usage, uncertainty_notes=uncertainty_notes)
 
     usage["attempted"] = True
     prompt, prompt_error = _render_prompt(
@@ -151,20 +248,32 @@ def maybe_refine_summary(
         task=task,
         deterministic_summary=deterministic_summary,
         evidence=evidence,
+        context_budget_tokens=settings.context_budget_tokens,
     )
     if prompt_error:
         usage["fallback_reason"] = prompt_error
         return LLMOutcome(summary=deterministic_summary, usage=usage, uncertainty_notes=uncertainty_notes)
+    system_prompt, system_error = _load_system_prompt(settings)
+    if system_error:
+        usage["fallback_reason"] = system_error
+        return LLMOutcome(summary=deterministic_summary, usage=usage, uncertainty_notes=uncertainty_notes)
+    assert system_prompt is not None
 
     try:
-        if settings.provider != "mock":
-            raise RuntimeError(f"provider '{settings.provider}' is not configured in this build")
-        _ = prompt  # prompt kept for explicit template usage/auditability
-        refined = _mock_complete(
-            capability=capability,
-            deterministic_summary=deterministic_summary,
-            evidence=evidence,
-        )
+        if settings.provider == "mock":
+            refined = _mock_complete(
+                capability=capability,
+                deterministic_summary=deterministic_summary,
+                evidence=evidence,
+            )
+        elif settings.provider == "openai_compatible":
+            refined = _openai_compatible_complete(
+                settings=settings,
+                system_prompt=system_prompt,
+                user_prompt=prompt,
+            )
+        else:
+            raise RuntimeError(f"provider '{settings.provider}' is not supported")
         usage["used"] = True
         uncertainty_notes.append("Summary includes assistive LLM wording; verify nuanced interpretation manually.")
         return LLMOutcome(summary=refined, usage=usage, uncertainty_notes=uncertainty_notes)
@@ -179,4 +288,3 @@ def provenance_section(*, llm_used: bool, evidence_count: int) -> dict[str, obje
         "evidence_items": evidence_count,
         "inference_source": "deterministic_heuristics+llm" if llm_used else "deterministic_heuristics",
     }
-
