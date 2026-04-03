@@ -34,7 +34,7 @@ Status values:
 | 022 | Run History with IDs and Referenceable Workflows | 2026-04-03 | implemented | 2026-04-03 | [022-run-history-with-ids-and-referenceable-workflows.md](/Users/tino/PhpstormProjects/forge/docs/features/022-run-history-with-ids-and-referenceable-workflows.md) |
 | 023 | Human-First Output Views | 2026-04-03 | implemented | 2026-04-03 | [023-human-first-output-views.md](/Users/tino/PhpstormProjects/forge/docs/features/023-human-first-output-views.md) |
 | 024 | Run History Retention and Prune | 2026-04-03 | defined | - | [024-run-history-retention-and-prune.md](/Users/tino/PhpstormProjects/forge/docs/features/024-run-history-retention-and-prune.md) |
-| 025 | From-Run References Across Capabilities | 2026-04-03 | defined | - | [025-from-run-references-across-capabilities.md](/Users/tino/PhpstormProjects/forge/docs/features/025-from-run-references-across-capabilities.md) |
+| 025 | From-Run References Across Capabilities | 2026-04-03 | implemented | 2026-04-03 | [025-from-run-references-across-capabilities.md](/Users/tino/PhpstormProjects/forge/docs/features/025-from-run-references-across-capabilities.md) |
 | 026 | Human-First Default Output | 2026-04-03 | implemented | 2026-04-03 | [026-human-first-default-output.md](/Users/tino/PhpstormProjects/forge/docs/features/026-human-first-default-output.md) |
 | 027 | Cross-Lingual Term Expansion | 2026-04-03 | implemented | 2026-04-03 | [027-cross-lingual-term-expansion.md](/Users/tino/PhpstormProjects/forge/docs/features/027-cross-lingual-term-expansion.md) |
 | 028 | LLM Query Planner | 2026-04-03 | implemented | 2026-04-03 | [028-llm-query-planner.md](/Users/tino/PhpstormProjects/forge/docs/features/028-llm-query-planner.md) |
@@ -49,4 +49,5 @@ Status values:
 ## Notes
 - 001: Core CLI and capability model implemented.
 - 020: Defined, not marked implemented yet.
+- 025: Added --from-run resolution across explain/review/test/describe with provenance metadata.
 - 035: LLM output language control via CLI/env/TOML and prompt propagation.

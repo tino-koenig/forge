@@ -8,6 +8,7 @@ All notable changes to Forge should be documented in this file.
 - issue 1: status index for features/issues with defined and implemented dates via `scripts/status_index.py` and `docs/status/*`
 - issue 1: issue folder bootstrap in `docs/issues/`
 - feature 035: explicit LLM output-language control (`--llm-output-language`, `FORGE_LLM_OUTPUT_LANGUAGE`, `llm.prompt.output_language`)
+- feature 025: `--from-run` support for `explain`/`review`/`test`/`describe` with deterministic payload resolution and provenance metadata
 
 ### Changed
 - issue 1: contributor guidance now requires changelog entries with feature/issue reference for each change

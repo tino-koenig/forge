@@ -123,7 +123,9 @@ status = "defined"
 
 [[feature]]
 id = "025"
-status = "defined"
+status = "implemented"
+implemented_on = "2026-04-03"
+notes = "Added --from-run resolution across explain/review/test/describe with provenance metadata."
 
 [[feature]]
 id = "026"

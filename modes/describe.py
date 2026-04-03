@@ -17,6 +17,7 @@ from core.llm_integration import provenance_section
 from core.output_contracts import build_contract, emit_contract_json
 from core.output_views import is_compact, is_full, resolve_view
 from core.repo_io import iter_repo_files, read_text_file
+from core.run_reference import RunReferenceError, resolve_from_run_payload
 
 
 LANGUAGE_BY_EXTENSION = {
@@ -442,6 +443,29 @@ def collect_describe_evidence(
 
 def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     repo_root = Path(args.repo_root).resolve()
+    try:
+        resolved_payload, from_run_meta = resolve_from_run_payload(
+            repo_root=repo_root,
+            requested_capability=request.capability,
+            explicit_payload=request.payload,
+            from_run_id=getattr(args, "from_run", None),
+        )
+    except RunReferenceError as exc:
+        if args.output_format == "json":
+            contract = build_contract(
+                capability=request.capability.value,
+                profile=request.profile.value,
+                summary="Run reference could not be resolved.",
+                evidence=[],
+                uncertainty=[str(exc)],
+                next_step="Run: forge runs list",
+                sections={"status": "from_run_resolution_failed"},
+            )
+            emit_contract_json(contract)
+            return 1
+        print(f"Run reference error: {exc}")
+        return 1
+    request = CommandRequest(capability=request.capability, profile=request.profile, payload=resolved_payload)
     target = resolve_describe_target(repo_root, request.payload, session)
     is_json = args.output_format == "json"
     view = resolve_view(args)
@@ -533,6 +557,8 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             llm_used=bool(llm_outcome.usage.get("used")),
             evidence_count=len(evidence_payload),
         )
+    if from_run_meta:
+        sections.update(from_run_meta)
 
     if is_json:
         contract = build_contract(
@@ -551,6 +577,12 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     notes = uncertainty if is_full(view) else uncertainty[:1]
     for note in notes:
         print(f"- {note}")
+    if from_run_meta:
+        print("\n--- From Run ---")
+        print(f"Source run id: {from_run_meta['source_run_id']}")
+        print(f"Source capability: {from_run_meta['source_run_capability']}")
+        print(f"Strategy: {from_run_meta['resolved_from_run_strategy']}")
+        print(f"Resolved payload: {from_run_meta['resolved_from_run_payload']}")
     if llm_outcome and is_full(view):
         print("\n--- LLM Usage ---")
         print(f"Policy: {llm_outcome.usage['policy']}")

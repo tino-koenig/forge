@@ -19,6 +19,7 @@ from core.llm_integration import maybe_refine_summary, provenance_section, resol
 from core.output_contracts import build_contract, emit_contract_json
 from core.output_views import is_compact, is_full, resolve_view
 from core.repo_io import read_text_file
+from core.run_reference import RunReferenceError, resolve_from_run_payload
 
 
 @dataclass
@@ -181,6 +182,30 @@ def print_explanation(
 def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     view = resolve_view(args)
     repo_root = Path(args.repo_root).resolve()
+    try:
+        resolved_payload, from_run_meta = resolve_from_run_payload(
+            repo_root=repo_root,
+            requested_capability=request.capability,
+            explicit_payload=request.payload,
+            from_run_id=getattr(args, "from_run", None),
+        )
+    except RunReferenceError as exc:
+        if args.output_format == "json":
+            contract = build_contract(
+                capability=request.capability.value,
+                profile=request.profile.value,
+                summary="Run reference could not be resolved.",
+                evidence=[],
+                uncertainty=[str(exc)],
+                next_step="Run: forge runs list",
+                sections={"status": "from_run_resolution_failed"},
+            )
+            emit_contract_json(contract)
+            return 1
+        print(f"Run reference error: {exc}")
+        return 1
+
+    request = CommandRequest(capability=request.capability, profile=request.profile, payload=resolved_payload)
     raw_target = request.payload.strip()
 
     target = resolve_file_or_symbol_target(repo_root, raw_target, session)
@@ -259,6 +284,8 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         "related_files": [str(path) for path in related],
         "resolved_target": str(rel_target),
     }
+    if from_run_meta:
+        sections.update(from_run_meta)
     deterministic_summary = f"{rel_target} is primarily {role}."
     llm_settings = resolve_settings(args, repo_root)
     llm_outcome = maybe_refine_summary(
@@ -305,6 +332,12 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         next_step=next_step,
         view=view,
     )
+    if from_run_meta:
+        print("\n--- From Run ---")
+        print(f"Source run id: {from_run_meta['source_run_id']}")
+        print(f"Source capability: {from_run_meta['source_run_capability']}")
+        print(f"Strategy: {from_run_meta['resolved_from_run_strategy']}")
+        print(f"Resolved payload: {from_run_meta['resolved_from_run_payload']}")
     if is_full(view):
         print("\n--- LLM Usage ---")
         print(f"Policy: {llm_outcome.usage['policy']}")

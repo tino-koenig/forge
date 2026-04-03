@@ -906,6 +906,127 @@ def gate_external_review_rules_invalid(repo_root: Path) -> None:
     assert_true(isinstance(errors, list) and len(errors) >= 1, "external rules invalid: expected surfaced rule error list")
 
 
+def gate_from_run_references(repo_root: Path) -> None:
+    run_cmd(
+        [
+            "python3",
+            str(FORGE),
+            "--output-format",
+            "json",
+            "--llm-provider",
+            "mock",
+            "--repo-root",
+            str(repo_root),
+            "query",
+            "compute_price",
+        ],
+        cwd=ROOT,
+    )
+    query_run = parse_json_output(
+        run_cmd(
+            ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "runs", "last"],
+            cwd=ROOT,
+        ).stdout
+    )
+    query_run_id = int(query_run.get("id", 0))
+    assert_true(query_run_id > 0, "from-run: expected query run id")
+
+    explain_from_query = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "explain",
+                "--from-run",
+                str(query_run_id),
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    explain_sections = explain_from_query.get("sections", {})
+    assert_true(explain_sections.get("source_run_id") == query_run_id, "from-run: explain should expose source_run_id")
+    assert_true(
+        explain_sections.get("source_run_capability") == "query",
+        "from-run: explain should expose source_run_capability=query",
+    )
+    assert_true(
+        isinstance(explain_sections.get("resolved_from_run_payload"), str),
+        "from-run: explain should expose resolved_from_run_payload",
+    )
+
+    run_cmd(
+        [
+            "python3",
+            str(FORGE),
+            "--output-format",
+            "json",
+            "--repo-root",
+            str(repo_root),
+            "review",
+            "src/controller.py",
+        ],
+        cwd=ROOT,
+    )
+    review_run = parse_json_output(
+        run_cmd(
+            ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "runs", "last"],
+            cwd=ROOT,
+        ).stdout
+    )
+    review_run_id = int(review_run.get("id", 0))
+    assert_true(review_run_id > 0, "from-run: expected review run id")
+
+    test_from_review = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "test",
+                "--from-run",
+                str(review_run_id),
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    test_sections = test_from_review.get("sections", {})
+    assert_true(test_sections.get("source_run_id") == review_run_id, "from-run: test should expose source_run_id")
+    assert_true(
+        test_sections.get("source_run_capability") == "review",
+        "from-run: test should expose source_run_capability=review",
+    )
+
+    invalid = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "explain",
+                "--from-run",
+                "999999",
+            ],
+            cwd=ROOT,
+            expect_ok=False,
+        ).stdout
+    )
+    invalid_sections = invalid.get("sections", {})
+    assert_true(
+        invalid_sections.get("status") == "from_run_resolution_failed",
+        "from-run: invalid id should return explicit resolution failure status",
+    )
+
+
 def gate_evidence_quality(repo_root: Path) -> None:
     query_payload = parse_json_output(
         run_cmd(
@@ -1042,6 +1163,7 @@ def run_all_gates() -> None:
         gate_doctor_config_validate_matrix_malformed(temp_repo_malformed)
         gate_external_review_rules(temp_repo_rules)
         gate_external_review_rules_invalid(temp_repo_rules_invalid)
+        gate_from_run_references(temp_repo)
 
 
 def main() -> int:

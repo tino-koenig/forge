@@ -25,6 +25,10 @@ REQUIRES_PAYLOAD = {
     "test": True,
 }
 
+
+FROM_RUN_CAPABILITIES = {"explain", "review", "describe", "test"}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="forge", description="Forge CLI")
     parser.add_argument(
@@ -143,19 +147,34 @@ def build_parser() -> argparse.ArgumentParser:
 
     explain_parser = subparsers.add_parser("explain", help="Run explain capability")
     explain_parser.add_argument(
+        "--from-run",
+        type=int,
+        help="Resolve explain target from a previous run id",
+    )
+    explain_parser.add_argument(
         "parts",
-        nargs="+",
-        help="Target; optional profile prefix: simple|standard|detailed",
+        nargs="*",
+        help="Target; optional profile prefix: simple|standard|detailed (or use --from-run)",
     )
 
     review_parser = subparsers.add_parser("review", help="Run review capability")
     review_parser.add_argument(
+        "--from-run",
+        type=int,
+        help="Resolve review target from a previous run id",
+    )
+    review_parser.add_argument(
         "parts",
-        nargs="+",
-        help="Target; optional profile prefix: simple|standard|detailed",
+        nargs="*",
+        help="Target; optional profile prefix: simple|standard|detailed (or use --from-run)",
     )
 
     describe_parser = subparsers.add_parser("describe", help="Run describe capability")
+    describe_parser.add_argument(
+        "--from-run",
+        type=int,
+        help="Resolve describe target from a previous run id",
+    )
     describe_parser.add_argument(
         "parts",
         nargs="*",
@@ -164,9 +183,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     test_parser = subparsers.add_parser("test", help="Run test capability")
     test_parser.add_argument(
+        "--from-run",
+        type=int,
+        help="Resolve test target from a previous run id",
+    )
+    test_parser.add_argument(
         "parts",
-        nargs="+",
-        help="Target; optional profile prefix: simple|standard|detailed",
+        nargs="*",
+        help="Target; optional profile prefix: simple|standard|detailed (or use --from-run)",
     )
 
     return parser
@@ -186,10 +210,13 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         capability_name = "doctor"
     try:
+        require_payload = REQUIRES_PAYLOAD[capability_name]
+        if capability_name in FROM_RUN_CAPABILITIES and getattr(args, "from_run", None) is not None:
+            require_payload = False
         request = build_request(
             capability_name=capability_name,
             parts=parts,
-            require_payload=REQUIRES_PAYLOAD[capability_name],
+            require_payload=require_payload,
         )
     except ValueError as exc:
         parser.error(str(exc))

@@ -19,6 +19,7 @@ from core.output_contracts import build_contract, emit_contract_json
 from core.output_views import is_compact, is_full, resolve_view
 from core.review_rules import ReviewRule, load_review_rules
 from core.repo_io import read_text_file
+from core.run_reference import RunReferenceError, resolve_from_run_payload
 
 
 SEVERITY_ORDER = {"high": 3, "medium": 2, "low": 1}
@@ -352,6 +353,29 @@ def print_summary(target: ResolvedTarget, findings: list[Finding], related_count
 
 def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     repo_root = Path(args.repo_root).resolve()
+    try:
+        resolved_payload, from_run_meta = resolve_from_run_payload(
+            repo_root=repo_root,
+            requested_capability=request.capability,
+            explicit_payload=request.payload,
+            from_run_id=getattr(args, "from_run", None),
+        )
+    except RunReferenceError as exc:
+        if args.output_format == "json":
+            contract = build_contract(
+                capability=request.capability.value,
+                profile=request.profile.value,
+                summary="Run reference could not be resolved.",
+                evidence=[],
+                uncertainty=[str(exc)],
+                next_step="Run: forge runs list",
+                sections={"status": "from_run_resolution_failed"},
+            )
+            emit_contract_json(contract)
+            return 1
+        print(f"Run reference error: {exc}")
+        return 1
+    request = CommandRequest(capability=request.capability, profile=request.profile, payload=resolved_payload)
     target = resolve_file_or_symbol_target(repo_root, request.payload, session)
     external_rules, rule_errors = load_review_rules(repo_root)
     path_classes: dict[str, str] = {}
@@ -389,6 +413,8 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                 next_step=next_step,
                 sections={"findings": [], "review_rules": {"loaded": len(external_rules), "errors": rule_errors}},
             )
+            if from_run_meta:
+                contract["sections"].update(from_run_meta)
             emit_contract_json(contract)
             return 0
         print("\n--- Findings ---")
@@ -489,6 +515,8 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                 ),
             },
         )
+        if from_run_meta:
+            contract["sections"].update(from_run_meta)
         emit_contract_json(contract)
         return 0
 
@@ -516,6 +544,12 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     print("\n--- Answer ---")
     print(llm_outcome.summary)
     print_findings(repo_root, capped_findings, view)
+    if from_run_meta:
+        print("\n--- From Run ---")
+        print(f"Source run id: {from_run_meta['source_run_id']}")
+        print(f"Source capability: {from_run_meta['source_run_capability']}")
+        print(f"Strategy: {from_run_meta['resolved_from_run_strategy']}")
+        print(f"Resolved payload: {from_run_meta['resolved_from_run_payload']}")
     if is_full(view):
         print("\n--- LLM Usage ---")
         print(f"Policy: {llm_outcome.usage['policy']}")

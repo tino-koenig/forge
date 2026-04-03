@@ -15,6 +15,7 @@ from core.llm_integration import provenance_section
 from core.output_contracts import build_contract, emit_contract_json
 from core.output_views import is_compact, is_full, resolve_view
 from core.repo_io import iter_repo_files, read_text_file
+from core.run_reference import RunReferenceError, resolve_from_run_payload
 
 
 @dataclass
@@ -278,6 +279,29 @@ def collect_test_evidence(
 
 def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     repo_root = Path(args.repo_root).resolve()
+    try:
+        resolved_payload, from_run_meta = resolve_from_run_payload(
+            repo_root=repo_root,
+            requested_capability=request.capability,
+            explicit_payload=request.payload,
+            from_run_id=getattr(args, "from_run", None),
+        )
+    except RunReferenceError as exc:
+        if args.output_format == "json":
+            contract = build_contract(
+                capability=request.capability.value,
+                profile=request.profile.value,
+                summary="Run reference could not be resolved.",
+                evidence=[],
+                uncertainty=[str(exc)],
+                next_step="Run: forge runs list",
+                sections={"status": "from_run_resolution_failed"},
+            )
+            emit_contract_json(contract)
+            return 1
+        print(f"Run reference error: {exc}")
+        return 1
+    request = CommandRequest(capability=request.capability, profile=request.profile, payload=resolved_payload)
     raw_target, explicit_cases = parse_payload(request.payload)
     target = resolve_file_or_symbol_target(repo_root, raw_target, session)
     path_classes: dict[str, str] = {}
@@ -320,6 +344,8 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                 next_step=next_step,
                 sections=sections,
             )
+            if from_run_meta:
+                contract["sections"].update(from_run_meta)
             emit_contract_json(contract)
             return 0
         print("\n--- Summary ---")
@@ -371,6 +397,8 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         sections["draft_skeleton"] = skeleton
     if index_status:
         sections["index_status"] = index_status
+    if from_run_meta:
+        sections.update(from_run_meta)
     sections["llm_usage"] = llm_outcome.usage
     sections["provenance"] = provenance_section(
         llm_used=bool(llm_outcome.usage.get("used")),
@@ -419,6 +447,12 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     for note in notes:
         print(f"- {note}")
 
+    if from_run_meta:
+        print("\n--- From Run ---")
+        print(f"Source run id: {from_run_meta['source_run_id']}")
+        print(f"Source capability: {from_run_meta['source_run_capability']}")
+        print(f"Strategy: {from_run_meta['resolved_from_run_strategy']}")
+        print(f"Resolved payload: {from_run_meta['resolved_from_run_payload']}")
     if is_full(view):
         print("\n--- LLM Usage ---")
         print(f"Policy: {llm_outcome.usage['policy']}")

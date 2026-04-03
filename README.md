@@ -107,6 +107,12 @@ Examples:
 - `forge runs 12 show full`
 - `forge runs 12 rerun`
 
+Cross-capability reuse from history:
+- `forge explain --from-run 12`
+- `forge review --from-run 12`
+- `forge test --from-run 12`
+- `forge describe --from-run 12`
+
 ### Later modes
 - `forge fix`
 - `forge implement`
