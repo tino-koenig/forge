@@ -144,6 +144,23 @@ The first public focus is:
 
 Fix and implementation workflows come next, built on the same transparent foundations.
 
+## Quality Gates
+
+Forge includes a repeatable capability quality-gate suite using fixture repositories.
+
+Run locally:
+
+```bash
+python3 scripts/run_quality_gates.py
+```
+
+The suite checks:
+- behavior smoke coverage across index/query/explain/review/describe/test
+- output contract JSON shape for query/explain/review
+- evidence quality expectations
+- read-only effect boundaries for analysis capabilities
+- fallback behavior with and without `.forge/index.json`
+
 ## Vision
 
 Forge aims to become a reliable workbench for AI-assisted repository work:
