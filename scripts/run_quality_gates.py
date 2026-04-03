@@ -357,6 +357,35 @@ def gate_env_file_autoload(repo_root: Path) -> None:
     assert_true(usage.get("used") is True, ".env autoload should provide missing API key")
 
 
+def gate_run_history_and_views(repo_root: Path) -> None:
+    run_cmd(["python3", str(FORGE), "--repo-root", str(repo_root), "query", "standard", "compute_price"], cwd=ROOT)
+    run_cmd(["python3", str(FORGE), "--repo-root", str(repo_root), "explain", "compute_price"], cwd=ROOT)
+
+    history_file = repo_root / ".forge" / "runs.jsonl"
+    assert_true(history_file.exists(), "runs history file should exist after capability execution")
+
+    last_payload = parse_json_output(
+        run_cmd(
+            ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "runs", "last"],
+            cwd=ROOT,
+        ).stdout
+    )
+    last_id = int(last_payload.get("id", 0))
+    assert_true(last_id > 0, "runs last should return a concrete run id")
+
+    show_out = run_cmd(
+        ["python3", str(FORGE), "--repo-root", str(repo_root), "runs", str(last_id), "show", "full"],
+        cwd=ROOT,
+    ).stdout
+    assert_true(f"Run #{last_id}" in show_out, "runs show full should print selected run id")
+
+    rerun_out = run_cmd(
+        ["python3", str(FORGE), "--repo-root", str(repo_root), "runs", str(last_id), "rerun"],
+        cwd=ROOT,
+    ).stdout
+    assert_true(len(rerun_out.strip()) > 0, "runs rerun should emit execution output")
+
+
 def gate_evidence_quality(repo_root: Path) -> None:
     query_payload = parse_json_output(
         run_cmd(
@@ -436,6 +465,7 @@ def run_all_gates() -> None:
         gate_config_toml_fallback(temp_repo)
         gate_config_precedence(temp_repo)
         gate_env_file_autoload(temp_repo)
+        gate_run_history_and_views(temp_repo)
         gate_evidence_quality(temp_repo)
         gate_effect_boundaries(temp_repo)
         gate_fallback_with_and_without_index(temp_repo)

@@ -10,6 +10,7 @@ It focuses on explicit modes and clear building blocks instead of hidden agent b
 - draft tests
 - describe a codebase
 - run diagnostics (`doctor`)
+- inspect and replay run history (`runs`)
 - support targeted fixes and implementations
 
 Forge is designed to be useful in small, focused tasks first. More advanced workflows are built from the same visible, understandable foundations.
@@ -97,6 +98,15 @@ Examples:
 - Check if local prompt templates are readable.
 - Probe OpenAI-compatible endpoint reachability when requested.
 
+### `forge runs`
+Inspect previous Forge executions and replay them by ID.
+
+Examples:
+- `forge runs list`
+- `forge runs last --output-format json`
+- `forge runs 12 show full`
+- `forge runs 12 rerun`
+
 ### Later modes
 - `forge fix`
 - `forge implement`
@@ -113,6 +123,7 @@ forge test src/Service/PriceCalculator.php --case "negative amount"
 forge describe
 forge doctor --check-llm-endpoint
 forge config validate --check-llm-endpoint
+forge runs 12 show full
 ```
 
 

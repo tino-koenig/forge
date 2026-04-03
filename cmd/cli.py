@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import argparse
+import io
+import json
 from pathlib import Path
+import sys
 
 from core.capability_model import build_request
 from core.env_loader import load_env_file
+from core.run_history import append_run
 from core.runtime import execute
 
 
 REQUIRES_PAYLOAD = {
     "index": False,
     "doctor": False,
+    "runs": False,
     "query": True,
     "explain": True,
     "review": True,
@@ -98,6 +103,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Probe configured OpenAI-compatible endpoint (/models) with timeout",
     )
 
+    runs_parser = subparsers.add_parser("runs", help="Inspect or replay recorded capability runs")
+    runs_parser.add_argument(
+        "parts",
+        nargs="*",
+        help="Examples: list | last | show <id> [compact|standard|full] | <id> show [view] | <id> rerun",
+    )
+
     query_parser = subparsers.add_parser("query", help="Run query capability")
     query_parser.add_argument(
         "parts",
@@ -158,4 +170,50 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         parser.error(str(exc))
         return 2
-    return execute(request=request, args=args)
+    stdout_capture = io.StringIO()
+    original_stdout = sys.stdout
+
+    class _Tee:
+        def write(self, data: str) -> int:
+            stdout_capture.write(data)
+            return original_stdout.write(data)
+
+        def flush(self) -> None:
+            stdout_capture.flush()
+            original_stdout.flush()
+
+    sys.stdout = _Tee()
+    try:
+        exit_code = execute(request=request, args=args)
+    finally:
+        sys.stdout = original_stdout
+
+    if capability_name != "runs":
+        text_output = stdout_capture.getvalue()
+        contract_payload = None
+        if args.output_format == "json":
+            try:
+                parsed = json.loads(text_output)
+                if isinstance(parsed, dict):
+                    contract_payload = parsed
+            except json.JSONDecodeError:
+                contract_payload = None
+        append_run(
+            repo_root=repo_root,
+            request={
+                "capability": request.capability.value,
+                "profile": request.profile.value,
+                "payload": request.payload,
+                "argv": argv or [],
+            },
+            execution={
+                "exit_code": exit_code,
+                "output_format": args.output_format,
+            },
+            output={
+                "text": text_output,
+                "contract": contract_payload,
+            },
+        )
+
+    return exit_code

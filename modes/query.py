@@ -42,6 +42,37 @@ STOP_WORDS = {
     "with",
 }
 
+GENERIC_QUERY_TERMS = {
+    "find",
+    "entry",
+    "point",
+    "main",
+    "show",
+    "where",
+    "which",
+}
+
+ENTRYPOINT_PHRASES = {
+    "main entry point",
+    "entry point",
+    "entrypoint",
+}
+
+ENTRYPOINT_PATH_HINTS = {
+    "forge.py",
+    "__main__.py",
+    "main.py",
+    "cmd/cli.py",
+}
+
+ENTRYPOINT_LINE_HINTS = (
+    "__main__",
+    "argparse.argumentparser(",
+    "entry_points",
+    "def main(",
+    "raise systemexit(main(",
+)
+
 
 @dataclass
 class Evidence:
@@ -77,17 +108,36 @@ def derive_search_terms(question: str, profile: Profile) -> list[str]:
     # Keep order but deduplicate.
     seen: set[str] = set()
     deduped: list[str] = []
+    entrypoint_intent = has_entrypoint_intent(question)
     for term in terms:
         if term in seen:
             continue
+        if term in GENERIC_QUERY_TERMS and not (
+            entrypoint_intent and term in {"main", "entry", "point"}
+        ):
+            continue
         seen.add(term)
         deduped.append(term)
+
+    if entrypoint_intent:
+        for hint in ("__main__", "main(", "argparse", "entrypoint"):
+            if hint in seen:
+                continue
+            seen.add(hint)
+            deduped.append(hint)
 
     if profile == Profile.SIMPLE:
         return deduped[:5]
     if profile == Profile.STANDARD:
         return deduped[:10]
     return deduped[:15]
+
+
+def has_entrypoint_intent(question: str) -> bool:
+    lowered = normalize_question(question).lower()
+    if any(phrase in lowered for phrase in ENTRYPOINT_PHRASES):
+        return True
+    return "main" in lowered and "entry" in lowered
 
 
 def collect_matches(
@@ -122,17 +172,39 @@ def collect_matches(
     return results
 
 
-def score_candidate(evidences: list[Evidence], path_class: str) -> int:
+def score_candidate(
+    candidate_path: Path,
+    evidences: list[Evidence],
+    path_class: str,
+    *,
+    entrypoint_intent: bool,
+) -> int:
     unique_terms = {e.term for e in evidences}
     base = len(evidences) + (len(unique_terms) * 2)
     class_bonus = path_class_weight(path_class)
-    return base + class_bonus
+    score = base + class_bonus
+
+    if entrypoint_intent:
+        rel = str(candidate_path).lower()
+        if rel in ENTRYPOINT_PATH_HINTS:
+            score += 9
+        elif rel.endswith("/__main__.py") or rel.endswith("/main.py"):
+            score += 7
+        line_boost = 0
+        for evidence in evidences[:8]:
+            line_lower = evidence.text.lower()
+            if any(hint in line_lower for hint in ENTRYPOINT_LINE_HINTS):
+                line_boost += 2
+        score += min(line_boost, 8)
+
+    return score
 
 
 def rank_candidates(
     matches: dict[str, list[Evidence]],
     *,
     path_classes: dict[str, str],
+    entrypoint_intent: bool,
 ) -> list[Candidate]:
     ranked: list[Candidate] = []
     for rel_path, evidences in matches.items():
@@ -141,7 +213,12 @@ def rank_candidates(
             Candidate(
                 path=Path(rel_path),
                 evidences=evidences,
-                score=score_candidate(evidences, path_class),
+                score=score_candidate(
+                    Path(rel_path),
+                    evidences,
+                    path_class,
+                    entrypoint_intent=entrypoint_intent,
+                ),
                 path_class=path_class,
             )
         )
@@ -237,7 +314,11 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         terms,
         session,
     )
-    candidates = rank_candidates(matches, path_classes=path_classes)
+    candidates = rank_candidates(
+        matches,
+        path_classes=path_classes,
+        entrypoint_intent=has_entrypoint_intent(question),
+    )
     detailed_lines: list[str] = []
     if request.profile == Profile.DETAILED and candidates:
         detailed_lines = enrich_detailed_context(repo_root, candidates, session)
