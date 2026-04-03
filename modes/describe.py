@@ -13,6 +13,8 @@ from core.analysis_primitives import (
 from core.capability_model import CommandRequest, Profile
 from core.effects import ExecutionSession
 from core.llm_integration import maybe_refine_summary, resolve_settings
+from core.llm_integration import provenance_section
+from core.output_contracts import build_contract, emit_contract_json
 from core.repo_io import iter_repo_files, read_text_file
 
 
@@ -192,6 +194,96 @@ def infer_target_summary(target: ResolvedTarget, repo_root: Path, session: Execu
     return f"{rel} is a project file ({line_count} lines)."
 
 
+def collect_repo_sections(
+    repo_root: Path,
+    files: list[Path],
+    request: CommandRequest,
+    session: ExecutionSession,
+    index_payload: dict[str, object] | None,
+) -> tuple[dict[str, object], str | None]:
+    languages = detect_languages(files)
+    frameworks = detect_framework_hints(files, repo_root, session, limit=80 if request.profile != Profile.SIMPLE else 25)
+    directories = directories_from_index_payload(index_payload)
+    if not directories:
+        directories = top_directories(files, repo_root)
+    important = find_important_files(files, repo_root)
+    architecture_notes: list[str] = []
+    if request.profile in {Profile.STANDARD, Profile.DETAILED}:
+        if any(path.relative_to(repo_root).parts and path.relative_to(repo_root).parts[0] == "cmd" for path in files):
+            architecture_notes.append("CLI-oriented structure detected (`cmd/` present).")
+        if any(path.relative_to(repo_root).parts and path.relative_to(repo_root).parts[0] == "modes" for path in files):
+            architecture_notes.append("Capability-style mode separation detected (`modes/` present).")
+        if any(path.relative_to(repo_root).parts and path.relative_to(repo_root).parts[0] == "core" for path in files):
+            architecture_notes.append("Shared core logic appears centralized in `core/`.")
+
+    sections: dict[str, object] = {
+        "target": {"kind": "repo", "path": "."},
+        "key_components": [{"path": directory, "file_count": count} for directory, count in directories[:6]],
+        "technologies": {
+            "languages": languages,
+            "framework_hints": frameworks,
+        },
+        "important_files": [str(path) for path in important],
+        "architecture_notes": architecture_notes,
+    }
+    if request.profile == Profile.DETAILED:
+        sections["readme_draft_snippet"] = (
+            "This repository provides a structured toolchain focused on explicit capabilities, "
+            "with readable command flows and audit-friendly outputs."
+        )
+    next_step = str(important[0]) if important else None
+    return sections, next_step
+
+
+def collect_target_sections(
+    target: ResolvedTarget,
+    repo_root: Path,
+    request: CommandRequest,
+    session: ExecutionSession,
+) -> dict[str, object]:
+    rel = target.path.relative_to(repo_root)
+    files: list[Path]
+    if target.kind == "directory":
+        files = list_directory_files(target.path, repo_root, session)
+    else:
+        files = [target.path]
+    languages = detect_languages(files)
+
+    key_components: list[dict[str, object]] = []
+    if target.kind == "directory":
+        subdirs = Counter(p.relative_to(target.path).parts[0] for p in files if len(p.relative_to(target.path).parts) > 1)
+        for name, count in subdirs.most_common(6):
+            key_components.append({"name": name, "file_count": count})
+    else:
+        content = read_text_file(target.path, session) or ""
+        defs = re.findall(r"^\s*(?:def|class)\s+([A-Za-z0-9_]+)", content, flags=re.MULTILINE)
+        key_components = [{"symbol": name} for name in defs[:8]]
+
+    important_files: list[str] = []
+    if request.profile in {Profile.STANDARD, Profile.DETAILED}:
+        if target.kind == "directory":
+            important_files = [str(item) for item in find_important_files(files, repo_root)[:8]]
+        else:
+            important_files = [str(rel)]
+
+    architecture_notes: list[str] = []
+    if request.profile == Profile.DETAILED:
+        if target.kind == "symbol":
+            architecture_notes.append("Target was resolved via symbol matching; verify semantic intent with `forge explain`.")
+        elif target.kind == "directory":
+            architecture_notes.append("Directory-level description is based on file distribution and naming patterns.")
+        else:
+            architecture_notes.append("File-level description is based on structural tokens and naming conventions.")
+
+    return {
+        "target": {"kind": target.kind, "path": str(rel), "source": target.source},
+        "key_components": key_components,
+        "technologies": {"languages": languages},
+        "important_files": important_files,
+        "architecture_notes": architecture_notes,
+    }
+
+
 def print_repo_description(
     repo_root: Path,
     files: list[Path],
@@ -344,24 +436,28 @@ def collect_describe_evidence(
 def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     repo_root = Path(args.repo_root).resolve()
     target = resolve_describe_target(repo_root, request.payload, session)
+    is_json = args.output_format == "json"
 
-    print("=== FORGE DESCRIBE ===")
-    print(f"Profile: {request.profile.value}")
-    if request.payload:
-        print(f"Target: {request.payload}")
+    if not is_json:
+        print("=== FORGE DESCRIBE ===")
+        print(f"Profile: {request.profile.value}")
+        if request.payload:
+            print(f"Target: {request.payload}")
 
     index = None
     if request.profile in {Profile.STANDARD, Profile.DETAILED}:
         index = load_index_payload(repo_root, session)
-    if index is not None:
-        print("Index: loaded .forge/index.json")
-    elif request.profile in {Profile.STANDARD, Profile.DETAILED}:
-        print("Index: not available, scanning repository directly")
+    if not is_json:
+        if index is not None:
+            print("Index: loaded .forge/index.json")
+        elif request.profile in {Profile.STANDARD, Profile.DETAILED}:
+            print("Index: not available, scanning repository directly")
 
     next_step: str | None = None
     llm_settings = resolve_settings(args, repo_root)
     llm_outcome = None
     evidence_payload: list[dict[str, object]] = []
+    sections: dict[str, object] = {}
     if target.kind == "repo":
         files = files_from_index_payload(repo_root, index)
         if not files:
@@ -376,14 +472,16 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             evidence=evidence_payload,
             settings=llm_settings,
         )
-        next_step = print_repo_description(
-            repo_root,
-            files,
-            request,
-            session,
-            index,
-            llm_outcome.summary,
-        )
+        sections, next_step = collect_repo_sections(repo_root, files, request, session, index)
+        if not is_json:
+            next_step = print_repo_description(
+                repo_root,
+                files,
+                request,
+                session,
+                index,
+                llm_outcome.summary,
+            )
     else:
         files = list_directory_files(target.path, repo_root, session) if target.kind == "directory" else [target.path]
         deterministic_summary = infer_target_summary(target, repo_root, session)
@@ -396,19 +494,51 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             evidence=evidence_payload,
             settings=llm_settings,
         )
-        print_target_description(target, repo_root, request, session, llm_outcome.summary)
+        sections = collect_target_sections(target, repo_root, request, session)
+        if not is_json:
+            print_target_description(target, repo_root, request, session, llm_outcome.summary)
+
+    uncertainty: list[str] = []
+    if target.kind == "symbol":
+        uncertainty.append("Symbol targets are resolved via best-effort matching.")
+    elif target.kind == "repo" and index is None and request.profile in {Profile.STANDARD, Profile.DETAILED}:
+        uncertainty.append("Index not available; summary is based on direct repository scan.")
+    else:
+        uncertainty.append("Summary is heuristic and based on visible structure/signals.")
+    if llm_outcome:
+        uncertainty.extend(llm_outcome.uncertainty_notes)
+
+    if target.kind == "repo":
+        resolved_next_step = (
+            f"Run: forge explain {next_step}" if next_step else 'Run: forge query "where is the main entrypoint"'
+        )
+    else:
+        rel = target.path.relative_to(repo_root)
+        resolved_next_step = f"Run: forge explain {rel}"
+
+    if llm_outcome:
+        sections["llm_usage"] = llm_outcome.usage
+        sections["provenance"] = provenance_section(
+            llm_used=bool(llm_outcome.usage.get("used")),
+            evidence_count=len(evidence_payload),
+        )
+
+    if is_json:
+        contract = build_contract(
+            capability=request.capability.value,
+            profile=request.profile.value,
+            summary=llm_outcome.summary if llm_outcome else deterministic_summary,
+            evidence=evidence_payload,
+            uncertainty=uncertainty,
+            next_step=resolved_next_step,
+            sections=sections,
+        )
+        emit_contract_json(contract)
+        return 0
 
     print("\n--- Uncertainty ---")
-    if target.kind == "symbol":
-        print("- Symbol targets are resolved via best-effort matching.")
-    elif target.kind == "repo" and index is None and request.profile in {Profile.STANDARD, Profile.DETAILED}:
-        print("- Index not available; summary is based on direct repository scan.")
-    else:
-        print("- Summary is heuristic and based on visible structure/signals.")
-    if llm_outcome:
-        for note in llm_outcome.uncertainty_notes:
-            print(f"- {note}")
-
+    for note in uncertainty:
+        print(f"- {note}")
     if llm_outcome:
         print("\n--- LLM Usage ---")
         print(f"Policy: {llm_outcome.usage['policy']}")
@@ -425,14 +555,6 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             "Inference source: "
             + ("deterministic heuristics + LLM" if llm_outcome.usage["used"] else "deterministic heuristics")
         )
-
     print("\n--- Next Step ---")
-    if target.kind == "repo":
-        if next_step:
-            print(f"Run: forge explain {next_step}")
-        else:
-            print('Run: forge query "where is the main entrypoint"')
-    elif target.path is not None:
-        rel = target.path.relative_to(repo_root)
-        print(f"Run: forge explain {rel}")
+    print(resolved_next_step)
     return 0

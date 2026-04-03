@@ -11,6 +11,8 @@ from core.analysis_primitives import load_index_path_class_map, prioritize_paths
 from core.capability_model import CommandRequest, Profile
 from core.effects import ExecutionSession
 from core.llm_integration import maybe_refine_summary, resolve_settings
+from core.llm_integration import provenance_section
+from core.output_contracts import build_contract, emit_contract_json
 from core.repo_io import iter_repo_files, read_text_file
 
 
@@ -278,24 +280,53 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     raw_target, explicit_cases = parse_payload(request.payload)
     target = resolve_file_or_symbol_target(repo_root, raw_target, session)
     path_classes: dict[str, str] = {}
+    is_json = args.output_format == "json"
+    index_status: str | None = None
 
-    print("=== FORGE TEST ===")
-    print(f"Profile: {request.profile.value}")
-    print(f"Target: {request.payload}")
-    if explicit_cases:
-        print(f"Explicit requested cases: {', '.join(explicit_cases)}")
+    if not is_json:
+        print("=== FORGE TEST ===")
+        print(f"Profile: {request.profile.value}")
+        print(f"Target: {request.payload}")
+        if explicit_cases:
+            print(f"Explicit requested cases: {', '.join(explicit_cases)}")
     if request.profile in {Profile.STANDARD, Profile.DETAILED}:
         path_classes = load_index_path_class_map(repo_root, session)
         if path_classes:
-            print("Index: loaded .forge/index.json")
+            index_status = "loaded .forge/index.json"
         else:
-            print("Index: not available, using direct repository scan only")
+            index_status = "not available, using direct repository scan only"
+        if not is_json:
+            print(f"Index: {index_status}")
 
     if target is None:
+        summary = "Target could not be resolved to a readable file or symbol."
+        uncertainty = [
+            "no matching file path under repo root",
+            "no symbol-like match found in readable text files",
+        ]
+        next_step = 'Run: forge query "where is the relevant logic implemented?"'
+        if is_json:
+            sections: dict[str, object] = {"resolved_target": None, "proposed_cases": []}
+            if index_status:
+                sections["index_status"] = index_status
+            contract = build_contract(
+                capability=request.capability.value,
+                profile=request.profile.value,
+                summary=summary,
+                evidence=[],
+                uncertainty=uncertainty,
+                next_step=next_step,
+                sections=sections,
+            )
+            emit_contract_json(contract)
+            return 0
         print("\n--- Summary ---")
-        print("Target could not be resolved to a readable file or symbol.")
+        print(summary)
+        print("\n--- Uncertainty ---")
+        for note in uncertainty:
+            print(f"- {note}")
         print("\n--- Next Step ---")
-        print('Run: forge query "where is the relevant logic implemented?"')
+        print(next_step)
         return 0
 
     conventions = detect_conventions(repo_root, session, path_classes)
@@ -312,6 +343,49 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         evidence=evidence_payload,
         settings=resolve_settings(args, repo_root),
     )
+    uncertainty = []
+    if target.source == "symbol":
+        uncertainty.append("Symbol target resolution is best-effort and may require manual confirmation.")
+    else:
+        uncertainty.append("Proposed test cases are heuristic and should be reviewed before implementation.")
+    uncertainty.extend(llm_outcome.uncertainty_notes)
+    next_step = f"Run: forge explain {resolved}"
+    skeleton = None
+    if request.profile in {Profile.STANDARD, Profile.DETAILED}:
+        skeleton = build_draft_skeleton(target, conventions, cases, request.profile)
+    sections: dict[str, object] = {
+        "resolved_target": {"path": str(resolved), "source": target.source},
+        "test_location": test_location,
+        "conventions": {
+            "framework": conventions.framework,
+            "naming_style": conventions.naming_style,
+            "assertion_style": conventions.assertion_style,
+            "likely_test_dir": conventions.likely_test_dir,
+        },
+        "proposed_cases": cases,
+    }
+    if skeleton:
+        sections["draft_skeleton"] = skeleton
+    if index_status:
+        sections["index_status"] = index_status
+    sections["llm_usage"] = llm_outcome.usage
+    sections["provenance"] = provenance_section(
+        llm_used=bool(llm_outcome.usage.get("used")),
+        evidence_count=len(evidence_payload),
+    )
+
+    if is_json:
+        contract = build_contract(
+            capability=request.capability.value,
+            profile=request.profile.value,
+            summary=llm_outcome.summary,
+            evidence=evidence_payload,
+            uncertainty=uncertainty,
+            next_step=next_step,
+            sections=sections,
+        )
+        emit_contract_json(contract)
+        return 0
 
     print("\n--- Summary ---")
     print(llm_outcome.summary)
@@ -329,19 +403,14 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     for idx, case in enumerate(cases, start=1):
         print(f"{idx}. {case}")
 
-    if request.profile in {Profile.STANDARD, Profile.DETAILED}:
-        skeleton = build_draft_skeleton(target, conventions, cases, request.profile)
+    if skeleton:
         print("\n--- Draft Test Skeleton ---")
         print("```python")
         print(skeleton)
         print("```")
 
     print("\n--- Uncertainty ---")
-    if target.source == "symbol":
-        print("- Symbol target resolution is best-effort and may require manual confirmation.")
-    else:
-        print("- Proposed test cases are heuristic and should be reviewed before implementation.")
-    for note in llm_outcome.uncertainty_notes:
+    for note in uncertainty:
         print(f"- {note}")
 
     print("\n--- LLM Usage ---")
@@ -361,5 +430,5 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     )
 
     print("\n--- Next Step ---")
-    print(f"Run: forge explain {resolved}")
+    print(next_step)
     return 0

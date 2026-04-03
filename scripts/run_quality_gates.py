@@ -113,16 +113,30 @@ def gate_output_contract(repo_root: Path) -> None:
         ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "review", "src/controller.py"],
         cwd=ROOT,
     ).stdout
+    describe_out = run_cmd(
+        ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "describe"],
+        cwd=ROOT,
+    ).stdout
+    test_out = run_cmd(
+        ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "test", "src/service.py"],
+        cwd=ROOT,
+    ).stdout
 
     doctor_payload = parse_json_output(doctor_out)
     query_payload = parse_json_output(query_out)
     explain_payload = parse_json_output(explain_out)
     review_payload = parse_json_output(review_out)
+    describe_payload = parse_json_output(describe_out)
+    test_payload = parse_json_output(test_out)
 
     ensure_output_contract(doctor_payload, "doctor")
     ensure_output_contract(query_payload, "query")
     ensure_output_contract(explain_payload, "explain")
     ensure_output_contract(review_payload, "review")
+    ensure_output_contract(describe_payload, "describe")
+    ensure_output_contract(test_payload, "test")
+    assert_true("sections" in describe_payload, "describe: expected sections payload")
+    assert_true("sections" in test_payload, "test: expected sections payload")
 
 
 def gate_llm_path(repo_root: Path) -> None:
@@ -405,6 +419,18 @@ def gate_evidence_quality(repo_root: Path) -> None:
             cwd=ROOT,
         ).stdout
     )
+    describe_payload = parse_json_output(
+        run_cmd(
+            ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "describe"],
+            cwd=ROOT,
+        ).stdout
+    )
+    test_payload = parse_json_output(
+        run_cmd(
+            ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "test", "src/service.py"],
+            cwd=ROOT,
+        ).stdout
+    )
 
     assert_true(len(query_payload["evidence"]) > 0, "query: expected non-empty evidence")
     assert_true(len(explain_payload["evidence"]) > 0, "explain: expected non-empty evidence")
@@ -412,6 +438,10 @@ def gate_evidence_quality(repo_root: Path) -> None:
     assert_true(len(findings) > 0, "review: expected at least one finding on controller fixture")
     first_evidence = findings[0].get("evidence", [])
     assert_true(len(first_evidence) > 0, "review: finding must include evidence")
+    describe_sections = describe_payload.get("sections", {})
+    assert_true("target" in describe_sections, "describe: expected target section")
+    test_sections = test_payload.get("sections", {})
+    assert_true("proposed_cases" in test_sections, "test: expected proposed_cases section")
 
 
 def gate_effect_boundaries(repo_root: Path) -> None:
