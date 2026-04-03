@@ -26,6 +26,7 @@ Each handler must declare:
 - deterministic effect on state
 - budget cost accounting
 - failure/fallback behavior
+- source-scope behavior (`repo_only`, `framework_only`, `all`)
 
 ### Handler semantics
 
@@ -36,10 +37,16 @@ Each handler must declare:
 - `summarize`: prepare final synthesis without modifying repo
 - `stop`: terminate loop with explicit reason
 
+Source-aware requirements:
+- `search` and `rank` must preserve source attribution for each candidate/evidence
+- default flow should prioritize repo candidates before framework expansion
+- framework handlers must enforce dedicated caps to stay bounded on large ecosystems (for example TYPO3)
+
 ### Validation
 
 - unsupported/invalid action for current state is rejected with policy-safe fallback
 - handlers must not mutate repository files
+- handlers must not mutate shared framework artifacts
 
 ## Design
 
@@ -51,6 +58,7 @@ Without explicit handlers, orchestration decisions cannot reliably improve resul
 
 - no free-form action expansion at runtime
 - no capability escalation via action choice
+- no unbounded framework crawl caused by `search` action
 
 ## Definition of Done
 
@@ -58,3 +66,4 @@ Without explicit handlers, orchestration decisions cannot reliably improve resul
 - action execution changes query state deterministically
 - handler-level budget accounting is visible in run metadata
 - invalid actions degrade safely with explicit fallback reason
+- source-aware execution and caps are enforced per handler

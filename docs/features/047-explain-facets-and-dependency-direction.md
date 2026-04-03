@@ -26,6 +26,11 @@ Direction control for dependency-like facets:
 - `--direction out` (what target calls/loads/imports)
 - `--direction in` (what references/uses target)
 
+Source scope control:
+- `--source-scope repo_only` (default)
+- `--source-scope framework_only`
+- `--source-scope all`
+
 ### CLI
 
 Examples:
@@ -33,6 +38,7 @@ Examples:
 - `forge explain core/llm_integration.py --focus dependencies --direction out`
 - `forge explain core/llm_integration.py --focus dependencies --direction in`
 - `forge explain core/llm_integration.py --focus resources`
+- `forge explain core/llm_integration.py --focus dependencies --direction out --source-scope all`
 
 If `--focus` is omitted, behavior remains `overview`-first for backwards compatibility.
 
@@ -53,6 +59,8 @@ Each edge should include:
 - edge kind
 - evidence anchors (file + line)
 - confidence level
+- `source_type` and `target_type` (`repo|framework|external`)
+- optional framework identity (`framework_id`, `framework_version`) when applicable
 
 ### Read-only guarantees
 
@@ -71,6 +79,7 @@ Current explain output is strong for local file interpretation but weak for dire
 - no hidden write operations
 - no mandatory language-specific deep semantic graph in first version
 - no speculative dependency claims without evidence anchors
+- no default expansion to entire framework universes when `repo_only` already answers the question
 
 ## Definition of Done
 
@@ -79,3 +88,4 @@ Current explain output is strong for local file interpretation but weak for dire
 - explain can expose resource edges (e.g. prompt/template file usage)
 - explain output contracts include facet-specific edge sections
 - read-only behavior is preserved
+- explain supports source-scoped dependency/resource analysis with explicit source typing

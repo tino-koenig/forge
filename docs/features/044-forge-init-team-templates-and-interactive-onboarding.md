@@ -27,6 +27,7 @@ Template responsibilities:
 - generate concrete `.forge/` files
 - encode profile/rule defaults for repository workflows
 - include template identity/version metadata for traceability
+- optionally define source policies for retrieval (for example `repo_only` by default, optional framework source registry references)
 
 ### Interactive question design
 
@@ -37,6 +38,9 @@ Requirements:
 - recommended defaults visible at each step
 - only ask questions that change generated config meaningfully
 - preview of created/changed files before write
+- if framework-aware retrieval is enabled, ask for minimal high-impact settings only:
+  - enabled source scope default (`repo_only` or `all`)
+  - allowed framework IDs/versions (for example `typo3@12`)
 
 ### Git and repository ownership
 

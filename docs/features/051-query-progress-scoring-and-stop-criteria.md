@@ -20,6 +20,7 @@ Progress signals may include:
 - improved top confidence/linkage confidence
 - increased evidence quality and coverage
 - reduced ambiguity in summary intent alignment
+- source-aware quality gain (repo evidence gain weighted higher than framework-only drift)
 
 ### No-progress policy
 
@@ -30,12 +31,14 @@ If progress remains below threshold for configurable consecutive iterations, orc
 Progress scoring must work together with hard budgets:
 - even high progress cannot bypass budget ceilings
 - low progress should stop before exhausting budgets where appropriate
+- framework-only progress should not keep loop alive indefinitely when repo confidence is already sufficient
 
 ### Output and trace
 
 Query output should expose concise progress context in full diagnostic views:
 - per-iteration progress score
 - stop trigger (sufficient evidence, no progress, or budget)
+- source contribution breakdown (repo/framework)
 
 ## Design
 
@@ -47,6 +50,7 @@ Bounded loops still need quality-aware stopping to avoid wasted latency and toke
 
 - no opaque black-box stopping heuristic
 - no LLM-only stopping decision without deterministic checks
+- no source-agnostic scoring that over-rewards huge framework candidate churn
 
 ## Definition of Done
 
@@ -54,3 +58,4 @@ Bounded loops still need quality-aware stopping to avoid wasted latency and toke
 - no-progress stopping is implemented and tested
 - done_reason selection reflects progress and budget outcomes
 - full diagnostics include progress and stop rationale
+- progress scoring documents how source type influences stop decisions

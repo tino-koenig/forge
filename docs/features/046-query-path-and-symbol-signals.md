@@ -19,6 +19,7 @@ Extend query ranking with:
 - summary-based retrieval/scoring from indexed `explain_summary`
 - existing `path_class` usage retained
 - explicit retrieval-source marking per candidate/evidence (`content_match`, `path_match`, `symbol_match`, `summary_match`)
+- explicit source-origin metadata (`source_type`: `repo` | `framework` | `external`) for source-aware ranking
 
 ### Path scoring semantics
 
@@ -54,6 +55,7 @@ Use index enrichment `explain_summary`:
 - keep deterministic behavior and index-optional fallback
 - no hidden writes in query mode
 - preserve inspectable scoring logic in code
+- default ranking should prefer `source_type=repo` over framework hits unless repo evidence is weak
 
 ## Design
 
@@ -74,3 +76,4 @@ Path intent is often explicit in user questions, while content-only matching can
 - path retrieval is a first-class candidate channel (not only fallback)
 - short common path tokens are prevented from dominating scores
 - index fallback behavior remains unchanged
+- retrieval output can show both match-source and origin-source (`retrieval_source` and `source_type`)

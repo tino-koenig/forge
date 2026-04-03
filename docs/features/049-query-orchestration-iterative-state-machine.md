@@ -21,6 +21,8 @@ Required state fields:
 - evidence payload
 - iteration counter
 - budget usage (`tokens`, `files`, `wall_time_ms`)
+- source usage (`repo_hits`, `framework_hits`, optional `external_hits`)
+- source-aware budget usage (`repo_files_read`, `framework_files_read`)
 - last decision and done reason
 
 ### Loop protocol
@@ -31,6 +33,10 @@ Each iteration must follow:
 3. action execution
 4. state update
 5. stop evaluation
+
+Source-aware execution policy:
+- start with `repo_only` search/rank by default
+- expand to framework sources only when repo evidence is below threshold or explicitly requested
 
 ### Termination
 
@@ -45,6 +51,7 @@ Loop must terminate with one explicit `done_reason`:
 - max iterations must be enforced at runtime
 - no hidden extra iterations beyond configured bounds
 - invalid decisions must route to deterministic fallback and terminate safely
+- framework expansion must respect separate hard caps (`max_framework_candidates`, `max_framework_reads`)
 
 ## Design
 

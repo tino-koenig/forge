@@ -23,6 +23,8 @@ Each iteration trace should include:
 - budget usage before/after
 - progress score delta
 - top candidate snapshot before/after
+- source distribution before/after (`repo`, `framework`, optional `external`)
+- source-scope and source-cap counters (for example framework-read budget remaining)
 
 ### Output integration
 
@@ -35,6 +37,7 @@ When fallback occurs, trace must show:
 - fallback trigger
 - blocked decision/action
 - policy or validation reason
+- source-scope reason when framework expansion is denied or capped
 
 ## Design
 
@@ -46,6 +49,7 @@ Adaptive orchestration without iteration-level visibility is hard to trust and t
 
 - no verbose-by-default output in compact/standard view
 - no exposure of secrets in trace payloads
+- no omission of source context when source-aware orchestration is active
 
 ## Definition of Done
 
@@ -53,3 +57,4 @@ Adaptive orchestration without iteration-level visibility is hard to trust and t
 - fallback and policy-block cases are traceable per iteration
 - diagnostics remain concise in non-full views
 - trace format is stable and documented
+- source-aware decisions are inspectable from trace data alone
