@@ -53,3 +53,39 @@ Forge development needs a stable and quick local loop. Editable install inside a
 - `forge ...` is documented as the primary dev invocation
 - compatibility invocation via `python -m forge ...` is documented
 - optional wrapper behavior is explicitly constrained
+
+## Implemented Behavior (Current)
+
+- `forge` is available as a console script from package metadata (`pyproject.toml`).
+- Module invocation compatibility is available via `python -m forge`.
+- Development workflow is venv + editable install and is treated as the primary path for contributors.
+
+## How To Use (Now)
+
+From repository root:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+forge --help
+```
+
+Compatibility invocation:
+
+```bash
+python3 -m forge --help
+```
+
+Typical development command examples:
+
+```bash
+forge index
+forge query "where is entrypoint"
+forge explain modes/query.py
+```
+
+## Known Limits / Notes
+
+- This feature defines the development invocation model, not workstation/user distribution packaging.
+- User-focused installation/distribution is specified separately (see feature 042).
