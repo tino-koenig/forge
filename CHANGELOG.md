@@ -25,6 +25,7 @@ All notable changes to Forge should be documented in this file.
 - feature 049: query action orchestration now executes as a bounded iterative state machine with explicit per-iteration trace and deterministic done reasons
 - feature 050: query orchestration now uses explicit action handlers for all catalog actions with per-iteration handler diagnostics and bounded search expansion
 - feature 051: query orchestration now applies deterministic progress scoring with source-aware weighting and no-progress stop criteria (`done_reason=no_progress`)
+- feature 052: query now exposes stable per-iteration orchestration trace diagnostics (budgets, source scope/distribution, snapshots, fallback/block reasons) in JSON and full text view
 
 ### Changed
 - issue 1: contributor guidance now requires changelog entries with feature/issue reference for each change

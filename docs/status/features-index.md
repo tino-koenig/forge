@@ -61,8 +61,9 @@ Status values:
 | 049 | Query Orchestration Iterative State Machine | 2026-04-03 | implemented | 2026-04-03 | [049-query-orchestration-iterative-state-machine.md](/Users/tino/PhpstormProjects/forge/docs/features/049-query-orchestration-iterative-state-machine.md) |
 | 050 | Query Action Handler Execution Model | 2026-04-03 | implemented | 2026-04-03 | [050-query-action-handler-execution-model.md](/Users/tino/PhpstormProjects/forge/docs/features/050-query-action-handler-execution-model.md) |
 | 051 | Query Progress Scoring and Stop Criteria | 2026-04-03 | implemented | 2026-04-03 | [051-query-progress-scoring-and-stop-criteria.md](/Users/tino/PhpstormProjects/forge/docs/features/051-query-progress-scoring-and-stop-criteria.md) |
-| 052 | Query Orchestration Iteration Trace and Debug View | 2026-04-03 | defined | - | [052-query-orchestration-iteration-trace-and-debug-view.md](/Users/tino/PhpstormProjects/forge/docs/features/052-query-orchestration-iteration-trace-and-debug-view.md) |
+| 052 | Query Orchestration Iteration Trace and Debug View | 2026-04-03 | implemented | 2026-04-03 | [052-query-orchestration-iteration-trace-and-debug-view.md](/Users/tino/PhpstormProjects/forge/docs/features/052-query-orchestration-iteration-trace-and-debug-view.md) |
 | 053 | Framework Profiles and Local Path Sources | 2026-04-03 | defined | - | [053-framework-profiles-and-local-path-sources.md](/Users/tino/PhpstormProjects/forge/docs/features/053-framework-profiles-and-local-path-sources.md) |
+| 054 | Ask Mode with User-Friendly Source Presets | unknown | defined | - | [054-ask-mode-user-friendly-source-presets.md](/Users/tino/PhpstormProjects/forge/docs/features/054-ask-mode-user-friendly-source-presets.md) |
 
 ## Notes
 - 001: Core CLI and capability model implemented.
@@ -84,3 +85,4 @@ Status values:
 - 049: Query orchestration now runs as a bounded iterative state machine with per-iteration trace and explicit done reasons.
 - 050: Query orchestration now executes explicit handlers for search/read/explain/rank/summarize/stop with per-iteration handler diagnostics.
 - 051: Query orchestration now computes deterministic per-iteration progress scoring with source-aware penalties and no-progress stop criteria.
+- 052: Query now emits stable iteration-level orchestration traces in JSON and full view with source-aware scope/cap diagnostics and fallback visibility.

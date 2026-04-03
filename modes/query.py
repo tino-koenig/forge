@@ -254,11 +254,24 @@ class QueryOrchestrationIteration:
     evidence_count_after: int
     candidate_count_before: int
     candidate_count_after: int
+    budget_tokens_before: int
+    budget_tokens_after: int
+    budget_files_before: int
+    budget_files_after: int
     budget_tokens_used: int
     budget_files_used: int
     elapsed_ms: int
     handler_status: str
     handler_detail: str
+    top_candidates_before: list[str]
+    top_candidates_after: list[str]
+    source_distribution_before: dict[str, int]
+    source_distribution_after: dict[str, int]
+    source_scope: str
+    source_scope_reason: str
+    source_caps: dict[str, int | bool]
+    fallback_trigger: str | None
+    blocked_reason: str | None
     progress_score: float
     progress_passed: bool
     progress_components: dict[str, float]
@@ -943,6 +956,23 @@ def _top_source_counts(candidates: list[Candidate], limit: int = 5) -> tuple[int
     return repo_count, framework_count
 
 
+def _top_candidate_snapshot(candidates: list[Candidate], limit: int = 3) -> list[str]:
+    snapshot: list[str] = []
+    for item in candidates[:limit]:
+        snapshot.append(f"{item.path} [{item.source_type}]")
+    return snapshot
+
+
+def _source_distribution(candidates: list[Candidate], limit: int = 8) -> dict[str, int]:
+    dist: dict[str, int] = {"repo": 0, "framework": 0, "external": 0}
+    for item in candidates[:limit]:
+        if item.source_type in dist:
+            dist[item.source_type] += 1
+        else:
+            dist[item.source_type] = dist.get(item.source_type, 0) + 1
+    return dist
+
+
 def compute_progress_score(
     *,
     candidates_before: list[Candidate],
@@ -1328,6 +1358,10 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         candidate_count_before = len(candidates)
         evidence_count_before = len(evidence_payload)
         candidates_before_snapshot = list(candidates)
+        budget_tokens_before = budget_tokens_used
+        budget_files_before = budget_files_used
+        top_candidates_before = _top_candidate_snapshot(candidates_before_snapshot)
+        source_distribution_before = _source_distribution(candidates_before_snapshot)
         feedback_by_path = {str(item.path): item for item in explain_feedback}
         top_feedback = feedback_by_path.get(str(candidates[0].path)) if candidates else None
         top_confidence_before = top_feedback.linkage_confidence if top_feedback is not None else None
@@ -1359,6 +1393,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             else str(outcome.fallback_reason or "no orchestration decision produced")
         )
         confidence = outcome.decisions[0].confidence if outcome.decisions else "medium"
+        iteration_fallback_trigger = outcome.fallback_reason
 
         if outcome.done_reason in {"policy_blocked", "budget_exhausted"} and not outcome.decisions:
             orchestration_done_reason = outcome.done_reason
@@ -1374,11 +1409,32 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                     evidence_count_after=len(evidence_payload),
                     candidate_count_before=candidate_count_before,
                     candidate_count_after=len(candidates),
+                    budget_tokens_before=budget_tokens_before,
+                    budget_tokens_after=budget_tokens_used,
+                    budget_files_before=budget_files_before,
+                    budget_files_after=budget_files_used,
                     budget_tokens_used=budget_tokens_used,
                     budget_files_used=budget_files_used,
                     elapsed_ms=int((time.perf_counter() - loop_started) * 1000),
                     handler_status="blocked",
                     handler_detail="decision not executable due to policy/budget block before handler stage",
+                    top_candidates_before=top_candidates_before,
+                    top_candidates_after=_top_candidate_snapshot(candidates),
+                    source_distribution_before=source_distribution_before,
+                    source_distribution_after=_source_distribution(candidates),
+                    source_scope="none",
+                    source_scope_reason="decision blocked before handler execution",
+                    source_caps={
+                        "remaining_files_before": max(0, llm_settings.query_orchestrator_max_files - budget_files_before),
+                        "remaining_tokens_before": max(0, llm_settings.query_orchestrator_max_tokens - budget_tokens_before),
+                        "remaining_files_after": max(0, llm_settings.query_orchestrator_max_files - budget_files_used),
+                        "remaining_tokens_after": max(0, llm_settings.query_orchestrator_max_tokens - budget_tokens_used),
+                        "framework_top_before": source_distribution_before.get("framework", 0),
+                        "framework_top_after": _source_distribution(candidates).get("framework", 0),
+                        "framework_expansion_allowed": False,
+                    },
+                    fallback_trigger=iteration_fallback_trigger,
+                    blocked_reason=reason,
                     progress_score=0.0,
                     progress_passed=False,
                     progress_components={},
@@ -1400,11 +1456,32 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                     evidence_count_after=len(evidence_payload),
                     candidate_count_before=candidate_count_before,
                     candidate_count_after=len(candidates),
+                    budget_tokens_before=budget_tokens_before,
+                    budget_tokens_after=budget_tokens_used,
+                    budget_files_before=budget_files_before,
+                    budget_files_after=budget_files_used,
                     budget_tokens_used=budget_tokens_used,
                     budget_files_used=budget_files_used,
                     elapsed_ms=int((time.perf_counter() - loop_started) * 1000),
                     handler_status="stop",
                     handler_detail="decision requested stop before handler stage",
+                    top_candidates_before=top_candidates_before,
+                    top_candidates_after=_top_candidate_snapshot(candidates),
+                    source_distribution_before=source_distribution_before,
+                    source_distribution_after=_source_distribution(candidates),
+                    source_scope="none",
+                    source_scope_reason="decision requested stop before handler execution",
+                    source_caps={
+                        "remaining_files_before": max(0, llm_settings.query_orchestrator_max_files - budget_files_before),
+                        "remaining_tokens_before": max(0, llm_settings.query_orchestrator_max_tokens - budget_tokens_before),
+                        "remaining_files_after": max(0, llm_settings.query_orchestrator_max_files - budget_files_used),
+                        "remaining_tokens_after": max(0, llm_settings.query_orchestrator_max_tokens - budget_tokens_used),
+                        "framework_top_before": source_distribution_before.get("framework", 0),
+                        "framework_top_after": _source_distribution(candidates).get("framework", 0),
+                        "framework_expansion_allowed": False,
+                    },
+                    fallback_trigger=iteration_fallback_trigger,
+                    blocked_reason=None,
                     progress_score=0.0,
                     progress_passed=True,
                     progress_components={},
@@ -1416,6 +1493,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         handler_status = "ok"
         handler_detail = "no action executed"
         source_scope = "repo_only"
+        source_scope_reason = "default repo-first scope"
 
         if next_action == "search":
             # Deterministically expand candidate pool via path-based index hints.
@@ -1423,6 +1501,9 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             top_repo_candidates = sum(1 for item in candidates[:5] if item.source_type == "repo")
             if top_repo_candidates <= 1:
                 source_scope = "all"
+                source_scope_reason = "scope widened because top repo candidates are weak"
+            else:
+                source_scope_reason = "scope kept repo-only because repo candidates are sufficient"
             added_candidates = _expand_matches_with_search_action(
                 matches=matches,
                 index_entry_map=index_entry_map,
@@ -1452,6 +1533,8 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             if not candidates:
                 handler_status = "noop"
                 handler_detail = "read skipped because no candidates are available"
+                source_scope = "none"
+                source_scope_reason = "no candidates available for read"
             else:
                 remaining_files = max(0, llm_settings.query_orchestrator_max_files - budget_files_used)
                 remaining_tokens = max(0, llm_settings.query_orchestrator_max_tokens - budget_tokens_used)
@@ -1459,10 +1542,20 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                     orchestration_done_reason = "budget_exhausted"
                     handler_status = "budget_blocked"
                     handler_detail = "read skipped because budget is exhausted"
+                    source_scope = "none"
+                    source_scope_reason = "read denied by budget caps"
                 else:
                     start_idx = 1 if adaptive_continue else 0
                     inspect_size = max(1, min(len(candidates) - start_idx, remaining_files))
                     inspect_slice = candidates[start_idx : start_idx + inspect_size]
+                    if inspect_slice:
+                        if all(item.source_type == "repo" for item in inspect_slice):
+                            source_scope = "repo_only"
+                        elif all(item.source_type == "framework" for item in inspect_slice):
+                            source_scope = "framework_only"
+                        else:
+                            source_scope = "mixed"
+                        source_scope_reason = "read scope derived from selected candidate slice"
                     budget_files_used += len(inspect_slice)
                     bounded_details = enrich_detailed_context(repo_root, inspect_slice, session)
                     extra_limit = min(len(bounded_details), remaining_tokens // 40)
@@ -1498,32 +1591,44 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             if not candidates:
                 handler_status = "noop"
                 handler_detail = "explain skipped because no candidates are available"
+                source_scope = "none"
+                source_scope_reason = "no candidates available for explain"
             else:
                 explain_feedback = build_explain_feedback(question=question, candidates=candidates[:12])
                 candidates = rerank_with_explain_feedback(candidates, explain_feedback)
                 action_applied = True
                 budget_tokens_used += min(80, llm_settings.query_orchestrator_max_tokens // 8)
                 handler_detail = "explain feedback recomputed for top candidates"
+                source_scope = "top_candidates"
+                source_scope_reason = "explain ran on bounded top candidate set"
 
         elif next_action == "rank":
             candidates = rerank_with_explain_feedback(candidates, explain_feedback)
             action_applied = True
             handler_detail = "rank recomputed candidate order from current explain feedback"
+            source_scope = "all_candidates"
+            source_scope_reason = "rank evaluated current candidate list"
 
         elif next_action == "summarize":
             orchestration_done_reason = "sufficient_evidence"
             action_applied = True
             handler_detail = "summarize requested finalization"
+            source_scope = "none"
+            source_scope_reason = "summarize finalizes without retrieval expansion"
 
         elif next_action == "stop":
             orchestration_done_reason = "sufficient_evidence"
             action_applied = True
             handler_detail = "stop requested finalization"
+            source_scope = "none"
+            source_scope_reason = "stop finalizes without retrieval expansion"
 
         else:
             orchestration_done_reason = "policy_blocked"
             handler_status = "invalid_action"
             handler_detail = f"unsupported action '{next_action}'"
+            source_scope = "none"
+            source_scope_reason = "unsupported action blocked by policy"
 
         feedback_after = {str(item.path): item for item in explain_feedback}
         top_feedback_after = feedback_after.get(str(candidates[0].path)) if candidates else None
@@ -1542,6 +1647,18 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         else:
             no_progress_streak += 1
 
+        top_candidates_after = _top_candidate_snapshot(candidates)
+        source_distribution_after = _source_distribution(candidates)
+        source_caps = {
+            "remaining_files_before": max(0, llm_settings.query_orchestrator_max_files - budget_files_before),
+            "remaining_tokens_before": max(0, llm_settings.query_orchestrator_max_tokens - budget_tokens_before),
+            "remaining_files_after": max(0, llm_settings.query_orchestrator_max_files - budget_files_used),
+            "remaining_tokens_after": max(0, llm_settings.query_orchestrator_max_tokens - budget_tokens_used),
+            "framework_top_before": source_distribution_before.get("framework", 0),
+            "framework_top_after": source_distribution_after.get("framework", 0),
+            "framework_expansion_allowed": source_scope in {"all", "framework_only", "mixed"},
+        }
+
         if orchestration_done_reason in {"policy_blocked", "budget_exhausted", "sufficient_evidence"} and (
             next_action in {"summarize"} or not action_applied and next_action not in {"search", "read", "explain", "rank"}
         ):
@@ -1557,11 +1674,24 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                     evidence_count_after=len(evidence_payload),
                     candidate_count_before=candidate_count_before,
                     candidate_count_after=len(candidates),
+                    budget_tokens_before=budget_tokens_before,
+                    budget_tokens_after=budget_tokens_used,
+                    budget_files_before=budget_files_before,
+                    budget_files_after=budget_files_used,
                     budget_tokens_used=budget_tokens_used,
                     budget_files_used=budget_files_used,
                     elapsed_ms=int((time.perf_counter() - loop_started) * 1000),
                     handler_status=handler_status,
                     handler_detail=handler_detail,
+                    top_candidates_before=top_candidates_before,
+                    top_candidates_after=top_candidates_after,
+                    source_distribution_before=source_distribution_before,
+                    source_distribution_after=source_distribution_after,
+                    source_scope=source_scope,
+                    source_scope_reason=source_scope_reason,
+                    source_caps=source_caps,
+                    fallback_trigger=iteration_fallback_trigger,
+                    blocked_reason=reason if orchestration_done_reason == "policy_blocked" else None,
                     progress_score=progress_score,
                     progress_passed=progress_passed,
                     progress_components=progress_components,
@@ -1592,11 +1722,24 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                 evidence_count_after=len(evidence_payload),
                 candidate_count_before=candidate_count_before,
                 candidate_count_after=len(candidates),
+                budget_tokens_before=budget_tokens_before,
+                budget_tokens_after=budget_tokens_used,
+                budget_files_before=budget_files_before,
+                budget_files_after=budget_files_used,
                 budget_tokens_used=budget_tokens_used,
                 budget_files_used=budget_files_used,
                 elapsed_ms=elapsed_after_ms,
                 handler_status=handler_status,
                 handler_detail=handler_detail,
+                top_candidates_before=top_candidates_before,
+                top_candidates_after=top_candidates_after,
+                source_distribution_before=source_distribution_before,
+                source_distribution_after=source_distribution_after,
+                source_scope=source_scope,
+                source_scope_reason=source_scope_reason,
+                source_caps=source_caps,
+                fallback_trigger=iteration_fallback_trigger,
+                blocked_reason=reason if orchestration_done_reason == "policy_blocked" else None,
                 progress_score=progress_score,
                 progress_passed=progress_passed,
                 progress_components=progress_components,
@@ -1772,11 +1915,24 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                     "evidence_count_after": item.evidence_count_after,
                     "candidate_count_before": item.candidate_count_before,
                     "candidate_count_after": item.candidate_count_after,
+                    "budget_tokens_before": item.budget_tokens_before,
+                    "budget_tokens_after": item.budget_tokens_after,
+                    "budget_files_before": item.budget_files_before,
+                    "budget_files_after": item.budget_files_after,
                     "budget_tokens_used": item.budget_tokens_used,
                     "budget_files_used": item.budget_files_used,
                     "elapsed_ms": item.elapsed_ms,
                     "handler_status": item.handler_status,
                     "handler_detail": item.handler_detail,
+                    "top_candidates_before": item.top_candidates_before,
+                    "top_candidates_after": item.top_candidates_after,
+                    "source_distribution_before": item.source_distribution_before,
+                    "source_distribution_after": item.source_distribution_after,
+                    "source_scope": item.source_scope,
+                    "source_scope_reason": item.source_scope_reason,
+                    "source_caps": item.source_caps,
+                    "fallback_trigger": item.fallback_trigger,
+                    "blocked_reason": item.blocked_reason,
                     "progress_score": item.progress_score,
                     "progress_passed": item.progress_passed,
                     "progress_components": item.progress_components,
@@ -1889,15 +2045,35 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                     f"- #{item.iteration}: decision={item.decision} next_action={item.next_action or '-'} "
                     f"done={item.done_reason} evidence={item.evidence_count_before}->{item.evidence_count_after} "
                     f"candidates={item.candidate_count_before}->{item.candidate_count_after} "
-                    f"files={item.budget_files_used} tokens~={item.budget_tokens_used} elapsed_ms={item.elapsed_ms} "
-                    f"handler={item.handler_status} progress={item.progress_score:.2f}"
+                    f"files={item.budget_files_before}->{item.budget_files_after} "
+                    f"tokens~={item.budget_tokens_before}->{item.budget_tokens_after} "
+                    f"elapsed_ms={item.elapsed_ms} handler={item.handler_status} "
+                    f"scope={item.source_scope} progress={item.progress_score:.2f}"
                 )
                 print(f"  detail: {item.handler_detail}")
+                print(f"  scope_reason: {item.source_scope_reason}")
+                print(
+                    "  top_before: "
+                    + (", ".join(item.top_candidates_before) if item.top_candidates_before else "-")
+                )
+                print(
+                    "  top_after: "
+                    + (", ".join(item.top_candidates_after) if item.top_candidates_after else "-")
+                )
+                print(
+                    "  source_dist: "
+                    f"before={item.source_distribution_before} after={item.source_distribution_after}"
+                )
+                print(f"  source_caps: {item.source_caps}")
                 if item.progress_components:
                     comps = ", ".join(
                         f"{k}={v:g}" for k, v in item.progress_components.items()
                     )
                     print(f"  progress_components: {comps}")
+                if item.fallback_trigger:
+                    print(f"  fallback_trigger: {item.fallback_trigger}")
+                if item.blocked_reason:
+                    print(f"  blocked_reason: {item.blocked_reason}")
         if orchestration_usage.get("fallback_reason"):
             print(f"Fallback: {orchestration_usage['fallback_reason']}")
 

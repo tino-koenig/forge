@@ -58,3 +58,40 @@ Adaptive orchestration without iteration-level visibility is hard to trust and t
 - diagnostics remain concise in non-full views
 - trace format is stable and documented
 - source-aware decisions are inspectable from trace data alone
+
+## Implemented Behavior (Current)
+
+- Query emits a structured per-iteration trace in `sections.action_orchestration.iterations[]` with:
+  - decision and action fields (`decision`, `next_action`, `reason`, `confidence`, `done_reason`)
+  - handler execution status (`handler_status`, `handler_detail`)
+  - budget transitions (`budget_files_before/after`, `budget_tokens_before/after`)
+  - retrieval state transitions (`candidate_count_before/after`, `evidence_count_before/after`)
+  - top candidate snapshots (`top_candidates_before`, `top_candidates_after`)
+  - source-aware diagnostics:
+    - `source_distribution_before`, `source_distribution_after`
+    - `source_scope`, `source_scope_reason`
+    - `source_caps` (`remaining_*`, framework-top counters, framework-expansion flag)
+  - fallback/policy diagnostics (`fallback_trigger`, `blocked_reason`)
+  - progress diagnostics (`progress_score`, `progress_passed`, `progress_components`)
+- Full text view (`--view full`) prints compact iteration trace blocks including:
+  - budgets before/after
+  - scope/scope reason
+  - top candidate snapshots
+  - source distribution and caps
+  - fallback/block reasons when present
+
+## How To Validate Quickly
+
+- Text trace:
+  - `forge --view full query "Where is query orchestration implemented?"`
+  - inspect `Action Orchestration -> Iterations`
+- JSON trace:
+  - `forge --output-format json query "Where is query orchestration implemented?"`
+  - inspect `sections.action_orchestration.iterations[]`
+  - inspect `sections.action_orchestration.usage.fallback_reason` for orchestrator fallback visibility
+
+## Known Limits / Notes
+
+- Trace data is intentionally emitted only in full diagnostics (text) and structured JSON sections; compact text output stays concise.
+- Candidate snapshots are bounded summaries (top paths), not full ranked dumps.
+- Source-cap diagnostics are budget/counter oriented and not yet framework-profile specific.

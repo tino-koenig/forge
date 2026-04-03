@@ -271,8 +271,10 @@ notes = "Query orchestration now computes deterministic per-iteration progress s
 
 [[feature]]
 id = "052"
-status = "defined"
+status = "implemented"
 defined_on = "2026-04-03"
+implemented_on = "2026-04-03"
+notes = "Query now emits stable iteration-level orchestration traces in JSON and full view with source-aware scope/cap diagnostics and fallback visibility."
 
 [[feature]]
 id = "045"
