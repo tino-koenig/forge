@@ -210,6 +210,8 @@ class Evidence:
     line: int
     text: str
     term: str
+    source: str = "content_match"  # content_match | path_match | symbol_match | summary_match
+    weight: int = 1
 
 
 @dataclass
@@ -218,6 +220,7 @@ class Candidate:
     evidences: list[Evidence]
     score: int
     path_class: str
+    retrieval_sources: list[str]
 
 
 @dataclass
@@ -414,18 +417,127 @@ def has_write_request_intent(question: str) -> bool:
     return False
 
 
+def _structural_tokens(raw: str) -> list[str]:
+    tokens = re.findall(r"[A-Za-z0-9_./-]+", raw.lower())
+    expanded: list[str] = []
+    for token in tokens:
+        expanded.append(token)
+        expanded.extend(part for part in re.split(r"[\\/._-]+", token) if part)
+    out: list[str] = []
+    seen: set[str] = set()
+    for token in expanded:
+        if len(token) < 3:
+            continue
+        if token in STOP_WORDS or token in STOP_WORDS_DE:
+            continue
+        if token in seen:
+            continue
+        seen.add(token)
+        out.append(token)
+    return out
+
+
+def _path_term_score(rel_lower: str, term: str) -> tuple[int, list[str]]:
+    normalized = " ".join(term.strip().lower().split())
+    if not normalized:
+        return 0, []
+
+    rel_parts = [part for part in re.split(r"[\\/._-]+", rel_lower) if part]
+    rel_part_set = set(rel_parts)
+    matched_tokens: list[str] = []
+    score = 0
+
+    if any(marker in normalized for marker in ("/", ".", "_", "-")) and normalized in rel_lower:
+        score += 6
+        matched_tokens.append(normalized)
+
+    tokens = _structural_tokens(normalized)
+    strong = [token for token in tokens if len(token) >= 4]
+    short = [token for token in tokens if len(token) == 3]
+    matched_strong = [token for token in strong if token in rel_part_set or token in rel_lower]
+    matched_short = [token for token in short if token in rel_part_set]
+
+    for token in matched_strong:
+        if token not in matched_tokens:
+            matched_tokens.append(token)
+    for token in matched_short:
+        if token not in matched_tokens:
+            matched_tokens.append(token)
+
+    if matched_strong:
+        score += len(matched_strong) * 2
+        if len(matched_strong) >= 2:
+            score += 2
+        if matched_short:
+            score += 1
+    elif len(matched_short) >= 2:
+        score += 1
+
+    if not matched_strong and len(matched_short) <= 1 and score < 6:
+        return 0, []
+    return min(score, 8), matched_tokens[:4]
+
+
+def _symbol_term_score(symbol: str, token: str) -> int:
+    if symbol == token:
+        return 5
+    if len(token) >= 4 and symbol.startswith(token):
+        return 3
+    if len(token) >= 5 and token in symbol:
+        return 1
+    return 0
+
+
+def _summary_term_score(summary_lower: str, term: str) -> tuple[int, list[str]]:
+    normalized = " ".join(term.strip().lower().split())
+    if not normalized:
+        return 0, []
+
+    matched_tokens: list[str] = []
+    score = 0
+    if normalized in summary_lower and len(normalized) >= 4:
+        score += 4
+        matched_tokens.append(normalized)
+
+    tokens = _structural_tokens(normalized)
+    strong = [token for token in tokens if len(token) >= 4]
+    short = [token for token in tokens if len(token) == 3]
+    matched_strong = [token for token in strong if token in summary_lower]
+    matched_short = [token for token in short if token in summary_lower]
+
+    for token in matched_strong:
+        if token not in matched_tokens:
+            matched_tokens.append(token)
+    for token in matched_short:
+        if token not in matched_tokens:
+            matched_tokens.append(token)
+
+    score += len(matched_strong)
+    if len(matched_strong) >= 2:
+        score += 1
+    if matched_short and matched_strong:
+        score += 1
+
+    if score <= 0:
+        return 0, []
+    return min(score, 6), matched_tokens[:4]
+
+
 def collect_matches(
     root: Path,
     terms: list[str],
     session: ExecutionSession,
+    *,
+    index_entry_map: dict[str, dict[str, object]],
 ) -> dict[str, list[Evidence]]:
     results: dict[str, list[Evidence]] = {}
     if not terms:
         return results
 
-    for file_path in iter_repo_files(root, session):
+    repo_files = iter_repo_files(root, session)
+    rel_paths = [str(path.relative_to(root)) for path in repo_files]
+    for file_path in repo_files:
         rel = str(file_path.relative_to(root))
-
         content = read_text_file(file_path, session)
         if not content:
             continue
@@ -437,12 +549,100 @@ def collect_matches(
             matched_term = next((term for term in terms if term in haystack), None)
             if matched_term is None:
                 continue
-            evidences.append(Evidence(line=idx, text=line.strip(), term=matched_term))
+            evidences.append(
+                Evidence(line=idx, text=line.strip(), term=matched_term, source="content_match", weight=1)
+            )
             if len(evidences) >= 12:
                 break
-
         if evidences:
             results[rel] = evidences
+
+    # Path retrieval is a first-class channel.
+    path_candidates = list(index_entry_map.keys()) if index_entry_map else rel_paths
+    for rel in path_candidates:
+        rel_lower = rel.lower()
+        path_hits: list[Evidence] = []
+        for term in terms:
+            score, matched_tokens = _path_term_score(rel_lower, term)
+            if score <= 0:
+                continue
+            token_hint = ", ".join(matched_tokens) if matched_tokens else "segment"
+            path_hits.append(
+                Evidence(
+                    line=0,
+                    text=f"path overlap ({token_hint})",
+                    term=term,
+                    source="path_match",
+                    weight=score,
+                )
+            )
+        if path_hits:
+            existing = results.setdefault(rel, [])
+            existing.extend(path_hits[:3])
+
+    # Symbol retrieval from index metadata.
+    if index_entry_map:
+        structural_terms: list[str] = []
+        seen_terms: set[str] = set()
+        for term in terms:
+            for token in _structural_tokens(term):
+                if token in seen_terms:
+                    continue
+                seen_terms.add(token)
+                structural_terms.append(token)
+
+        for rel, entry in index_entry_map.items():
+            raw_symbols = entry.get("top_level_symbols")
+            if not isinstance(raw_symbols, list) or not raw_symbols:
+                continue
+            symbols = [str(item).strip().lower() for item in raw_symbols if str(item).strip()]
+            symbol_hits: list[Evidence] = []
+            for token in structural_terms:
+                best_symbol = ""
+                best_score = 0
+                for symbol in symbols:
+                    score = _symbol_term_score(symbol, token)
+                    if score > best_score:
+                        best_score = score
+                        best_symbol = symbol
+                if best_score > 0:
+                    symbol_hits.append(
+                        Evidence(
+                            line=0,
+                            text=f"symbol match: {best_symbol}",
+                            term=token,
+                            source="symbol_match",
+                            weight=best_score,
+                        )
+                    )
+            if symbol_hits:
+                existing = results.setdefault(rel, [])
+                existing.extend(symbol_hits[:3])
+
+        # Summary retrieval from index enrichment metadata.
+        for rel, entry in index_entry_map.items():
+            raw_summary = entry.get("explain_summary")
+            if not isinstance(raw_summary, str) or not raw_summary.strip():
+                continue
+            summary_lower = raw_summary.lower()
+            summary_hits: list[Evidence] = []
+            for term in terms:
+                score, matched_tokens = _summary_term_score(summary_lower, term)
+                if score <= 0:
+                    continue
+                token_hint = ", ".join(matched_tokens) if matched_tokens else "summary overlap"
+                summary_hits.append(
+                    Evidence(
+                        line=0,
+                        text=f"summary overlap ({token_hint})",
+                        term=term,
+                        source="summary_match",
+                        weight=score,
+                    )
+                )
+            if summary_hits:
+                existing = results.setdefault(rel, [])
+                existing.extend(summary_hits[:3])
     return results
 
 
@@ -458,10 +658,23 @@ def score_candidate(
     index_explain_summary: str | None,
     question_terms: set[str],
 ) -> int:
-    unique_terms = {e.term for e in evidences}
-    base = len(evidences) + (len(unique_terms) * 2)
+    content_evidences = [item for item in evidences if item.source == "content_match"]
+    path_evidences = [item for item in evidences if item.source == "path_match"]
+    symbol_evidences = [item for item in evidences if item.source == "symbol_match"]
+    summary_evidences = [item for item in evidences if item.source == "summary_match"]
+
+    unique_terms = {e.term for e in content_evidences}
+    base = len(content_evidences) + (len(unique_terms) * 2)
     class_bonus = path_class_weight(path_class)
     score = base + class_bonus
+    path_weight = sum(item.weight for item in path_evidences)
+    if len(path_evidences) >= 2:
+        path_weight += 3
+    if path_evidences and max(item.weight for item in path_evidences) >= 6 and len(path_evidences) >= 2:
+        path_weight += 2
+    score += min(path_weight, 16)
+    score += min(sum(item.weight for item in symbol_evidences), 6)
+    score += min(sum(item.weight for item in summary_evidences), 8)
 
     if entrypoint_intent:
         rel = str(candidate_path).lower()
@@ -532,6 +745,7 @@ def rank_candidates(
     ranked: list[Candidate] = []
     for rel_path, evidences in matches.items():
         path_class = path_classes.get(rel_path, "normal")
+        retrieval_sources = sorted({item.source for item in evidences})
         ranked.append(
             Candidate(
                 path=Path(rel_path),
@@ -552,6 +766,7 @@ def rank_candidates(
                     question_terms=question_terms,
                 ),
                 path_class=path_class,
+                retrieval_sources=retrieval_sources,
             )
         )
     ranked.sort(key=lambda c: (c.score, len(c.evidences)), reverse=True)
@@ -593,11 +808,22 @@ def build_explain_feedback(
         rationale.append(f"evidence density={evidence_density:.2f}")
 
         score = candidate.score
+        path_strength = sum(item.weight for item in candidate.evidences if item.source == "path_match")
+        symbol_strength = sum(item.weight for item in candidate.evidences if item.source == "symbol_match")
+        has_content = any(item.source == "content_match" for item in candidate.evidences)
         if intent_match:
             score += 4 + min(intent_overlap, 3)
         if evidence_density >= 0.75:
             score += 4
         elif evidence_density >= 0.4:
+            score += 2
+        if path_strength >= 10:
+            score += 4
+        elif path_strength >= 6:
+            score += 2
+        if symbol_strength >= 5:
+            score += 1
+        if not has_content and path_strength >= 6:
             score += 2
         if rel.startswith("docs/") and any(term in question_terms for term in {"function", "class", "api", "llm"}):
             score -= 3
@@ -698,7 +924,8 @@ def print_output(
         if is_full(view):
             print(
                 f"{idx}. {candidate.path} "
-                f"(score={candidate.score}, class={candidate.path_class}, matches={len(candidate.evidences)})"
+                f"(score={candidate.score}, class={candidate.path_class}, matches={len(candidate.evidences)}, "
+                f"sources={','.join(candidate.retrieval_sources)})"
             )
         else:
             print(f"{idx}. {candidate.path} ({len(candidate.evidences)} matches)")
@@ -709,7 +936,13 @@ def print_output(
         evidence_line_limit = 2 if view == "standard" else 3
         for candidate in candidates[:evidence_candidate_limit]:
             for evidence in candidate.evidences[:evidence_line_limit]:
-                print(f"{candidate.path}:{evidence.line}: {evidence.text} [term={evidence.term}]")
+                if evidence.line > 0:
+                    print(
+                        f"{candidate.path}:{evidence.line}: {evidence.text} "
+                        f"[term={evidence.term}; source={evidence.source}]"
+                    )
+                else:
+                    print(f"{candidate.path}: {evidence.text} [term={evidence.term}; source={evidence.source}]")
 
     print("\n--- Next Step ---")
     print(f"Run: forge explain {candidates[0].path}")
@@ -727,7 +960,7 @@ def enrich_detailed_context(
         if not content:
             continue
         lines = content.splitlines()
-        focus_lines = [e.line for e in candidate.evidences[:2]]
+        focus_lines = [e.line for e in candidate.evidences[:2] if e.line > 0]
         for focus in focus_lines:
             start = max(1, focus - 1)
             end = min(len(lines), focus + 1)
@@ -828,6 +1061,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         repo_root,
         terms,
         session,
+        index_entry_map=index_entry_map,
     )
     llm_call_intent = bool(planner is not None and planner.usage.get("used")) and (planner.intent or "").strip().lower() in {
         "llm_usage_locations",
@@ -860,6 +1094,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                     "line": item.line,
                     "text": item.text,
                     "term": item.term,
+                    "source": item.source,
                 }
             )
     orchestration = maybe_orchestrate_query_actions(
@@ -952,6 +1187,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                 "score": candidate.score,
                 "path_class": candidate.path_class,
                 "matches": len(candidate.evidences),
+                "retrieval_sources": candidate.retrieval_sources,
             }
             for candidate in candidates[:8]
         ],

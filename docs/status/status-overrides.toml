@@ -235,6 +235,16 @@ status = "defined"
 defined_on = "2026-04-03"
 
 [[feature]]
+id = "047"
+status = "defined"
+defined_on = "2026-04-03"
+
+[[feature]]
+id = "048"
+status = "defined"
+defined_on = "2026-04-03"
+
+[[feature]]
 id = "045"
 status = "implemented"
 defined_on = "2026-04-03"

@@ -55,6 +55,9 @@ Status values:
 | 043 | Repository Context Discovery via Forge Marker | 2026-04-03 | defined | - | [043-repository-context-discovery-via-forge-marker.md](/Users/tino/PhpstormProjects/forge/docs/features/043-repository-context-discovery-via-forge-marker.md) |
 | 044 | Forge Init Team Templates and Interactive Onboarding | 2026-04-03 | defined | - | [044-forge-init-team-templates-and-interactive-onboarding.md](/Users/tino/PhpstormProjects/forge/docs/features/044-forge-init-team-templates-and-interactive-onboarding.md) |
 | 045 | Run History Always JSON Contract | 2026-04-03 | implemented | 2026-04-03 | [045-run-history-always-json-contract.md](/Users/tino/PhpstormProjects/forge/docs/features/045-run-history-always-json-contract.md) |
+| 046 | Query Path And Symbol Signals | unknown | defined | - | [046-query-path-and-symbol-signals.md](/Users/tino/PhpstormProjects/forge/docs/features/046-query-path-and-symbol-signals.md) |
+| 047 | Explain Facets and Dependency Direction | 2026-04-03 | defined | - | [047-explain-facets-and-dependency-direction.md](/Users/tino/PhpstormProjects/forge/docs/features/047-explain-facets-and-dependency-direction.md) |
+| 048 | Graph JSON Edge Cache under .forge | 2026-04-03 | defined | - | [048-graph-json-edge-cache-under-forge.md](/Users/tino/PhpstormProjects/forge/docs/features/048-graph-json-edge-cache-under-forge.md) |
 
 ## Notes
 - 001: Core CLI and capability model implemented.
