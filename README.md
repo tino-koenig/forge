@@ -258,6 +258,14 @@ max_terms = 12
 max_code_variants = 8
 max_latency_ms = 2500
 
+[llm.query_orchestrator]
+enabled = true
+mode = "optional" # off | optional | preferred
+max_iterations = 2
+max_files = 8
+max_tokens = 1200
+max_wall_time_ms = 2500
+
 [llm.observability]
 enabled = false
 level = "minimal" # minimal | standard | debug

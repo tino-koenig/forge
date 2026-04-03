@@ -5,11 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from core.capability_model import (
-    CAPABILITY_POLICIES,
     CommandRequest,
     EffectClass,
-    EffectViolationError,
 )
+from core.mode_capability_contract import effect_to_action, require_action_eligibility
 
 
 @dataclass
@@ -18,13 +17,10 @@ class ExecutionSession:
     effective_effects: set[EffectClass] = field(default_factory=set)
 
     def record_effect(self, effect: EffectClass, detail: str = "") -> None:
-        policy = CAPABILITY_POLICIES[self.request.capability]
-        if effect not in policy.allowed_effects:
-            message = (
-                f"Disallowed effect '{effect.value}' for capability "
-                f"'{self.request.capability.value}'."
-            )
-            if detail:
-                message = f"{message} Detail: {detail}"
-            raise EffectViolationError(message)
+        require_action_eligibility(
+            capability=self.request.capability,
+            action=effect_to_action(effect),
+            phase="executor",
+            detail=detail or None,
+        )
         self.effective_effects.add(effect)

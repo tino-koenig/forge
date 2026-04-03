@@ -31,6 +31,12 @@ class ResolvedLLMConfig:
     query_planner_max_terms: int
     query_planner_max_code_variants: int
     query_planner_max_latency_ms: int
+    query_orchestrator_enabled: bool
+    query_orchestrator_mode: str
+    query_orchestrator_max_iterations: int
+    query_orchestrator_max_files: int
+    query_orchestrator_max_tokens: int
+    query_orchestrator_max_wall_time_ms: int
     observability_enabled: bool
     observability_level: str
     observability_retention_count: int
@@ -152,6 +158,12 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
             query_planner_max_terms=12,
             query_planner_max_code_variants=8,
             query_planner_max_latency_ms=2500,
+            query_orchestrator_enabled=True,
+            query_orchestrator_mode="optional",
+            query_orchestrator_max_iterations=2,
+            query_orchestrator_max_files=8,
+            query_orchestrator_max_tokens=1200,
+            query_orchestrator_max_wall_time_ms=2500,
             observability_enabled=False,
             observability_level="minimal",
             observability_retention_count=1000,
@@ -179,6 +191,12 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
             query_planner_max_terms=12,
             query_planner_max_code_variants=8,
             query_planner_max_latency_ms=2500,
+            query_orchestrator_enabled=True,
+            query_orchestrator_mode="optional",
+            query_orchestrator_max_iterations=2,
+            query_orchestrator_max_files=8,
+            query_orchestrator_max_tokens=1200,
+            query_orchestrator_max_wall_time_ms=2500,
             observability_enabled=False,
             observability_level="minimal",
             observability_retention_count=1000,
@@ -329,6 +347,54 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
     query_planner_max_terms = _int_or_default(planner_max_terms_raw, 12)
     query_planner_max_code_variants = _int_or_default(planner_max_code_variants_raw, 8)
     query_planner_max_latency_ms = _int_or_default(planner_max_latency_ms_raw, 2500)
+    orchestrator_enabled_raw, source["query_orchestrator_enabled"] = _first_non_none(
+        [
+            ("toml_local", _nested_get(local_payload, "llm.query_orchestrator.enabled")),
+            ("toml", _nested_get(payload, "llm.query_orchestrator.enabled")),
+            ("default", True),
+        ]
+    )
+    orchestrator_mode_raw, source["query_orchestrator_mode"] = _first_non_none(
+        [
+            ("toml_local", _nested_get(local_payload, "llm.query_orchestrator.mode")),
+            ("toml", _nested_get(payload, "llm.query_orchestrator.mode")),
+            ("default", "optional"),
+        ]
+    )
+    orchestrator_max_iterations_raw, source["query_orchestrator_max_iterations"] = _first_non_none(
+        [
+            ("toml_local", _nested_get(local_payload, "llm.query_orchestrator.max_iterations")),
+            ("toml", _nested_get(payload, "llm.query_orchestrator.max_iterations")),
+            ("default", 2),
+        ]
+    )
+    orchestrator_max_files_raw, source["query_orchestrator_max_files"] = _first_non_none(
+        [
+            ("toml_local", _nested_get(local_payload, "llm.query_orchestrator.max_files")),
+            ("toml", _nested_get(payload, "llm.query_orchestrator.max_files")),
+            ("default", 8),
+        ]
+    )
+    orchestrator_max_tokens_raw, source["query_orchestrator_max_tokens"] = _first_non_none(
+        [
+            ("toml_local", _nested_get(local_payload, "llm.query_orchestrator.max_tokens")),
+            ("toml", _nested_get(payload, "llm.query_orchestrator.max_tokens")),
+            ("default", 1200),
+        ]
+    )
+    orchestrator_max_wall_time_ms_raw, source["query_orchestrator_max_wall_time_ms"] = _first_non_none(
+        [
+            ("toml_local", _nested_get(local_payload, "llm.query_orchestrator.max_wall_time_ms")),
+            ("toml", _nested_get(payload, "llm.query_orchestrator.max_wall_time_ms")),
+            ("default", 2500),
+        ]
+    )
+    query_orchestrator_enabled = _bool_or_default(orchestrator_enabled_raw, True)
+    query_orchestrator_mode = str(orchestrator_mode_raw).strip().lower()
+    query_orchestrator_max_iterations = _int_or_default(orchestrator_max_iterations_raw, 2)
+    query_orchestrator_max_files = _int_or_default(orchestrator_max_files_raw, 8)
+    query_orchestrator_max_tokens = _int_or_default(orchestrator_max_tokens_raw, 1200)
+    query_orchestrator_max_wall_time_ms = _int_or_default(orchestrator_max_wall_time_ms_raw, 2500)
 
     observability_enabled_raw, source["observability_enabled"] = _first_non_none(
         [
@@ -390,6 +456,18 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
         validation_errors.append("query_planner.max_code_variants must be within [0, 64]")
     if query_planner_max_latency_ms < 200 or query_planner_max_latency_ms > 120000:
         validation_errors.append("query_planner.max_latency_ms must be within [200, 120000]")
+    if query_orchestrator_mode not in {"off", "optional", "preferred"}:
+        validation_errors.append(
+            f"unknown query orchestrator mode '{query_orchestrator_mode}' (expected off|optional|preferred)"
+        )
+    if query_orchestrator_max_iterations < 1 or query_orchestrator_max_iterations > 8:
+        validation_errors.append("query_orchestrator.max_iterations must be within [1, 8]")
+    if query_orchestrator_max_files < 1 or query_orchestrator_max_files > 200:
+        validation_errors.append("query_orchestrator.max_files must be within [1, 200]")
+    if query_orchestrator_max_tokens < 100 or query_orchestrator_max_tokens > 8000:
+        validation_errors.append("query_orchestrator.max_tokens must be within [100, 8000]")
+    if query_orchestrator_max_wall_time_ms < 200 or query_orchestrator_max_wall_time_ms > 120000:
+        validation_errors.append("query_orchestrator.max_wall_time_ms must be within [200, 120000]")
     if observability_level not in {"minimal", "standard", "debug"}:
         validation_errors.append("observability.level must be one of: minimal, standard, debug")
     if observability_retention_count < 100 or observability_retention_count > 100000:
@@ -424,6 +502,12 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
         query_planner_max_terms=query_planner_max_terms,
         query_planner_max_code_variants=query_planner_max_code_variants,
         query_planner_max_latency_ms=query_planner_max_latency_ms,
+        query_orchestrator_enabled=query_orchestrator_enabled,
+        query_orchestrator_mode=query_orchestrator_mode,
+        query_orchestrator_max_iterations=query_orchestrator_max_iterations,
+        query_orchestrator_max_files=query_orchestrator_max_files,
+        query_orchestrator_max_tokens=query_orchestrator_max_tokens,
+        query_orchestrator_max_wall_time_ms=query_orchestrator_max_wall_time_ms,
         observability_enabled=observability_enabled,
         observability_level=observability_level,
         observability_retention_count=observability_retention_count,

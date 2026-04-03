@@ -1235,6 +1235,80 @@ def gate_explain_structured_synthesis(repo_root: Path) -> None:
     )
 
 
+def gate_mode_capability_contract_query_read_only(repo_root: Path) -> None:
+    before = snapshot_repo_files(repo_root)
+    payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "query",
+                "please",
+                "fix",
+                "and",
+                "rewrite",
+                "src/service.py",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    sections = payload.get("sections", {})
+    violations = sections.get("policy_violations", [])
+    assert_true(isinstance(violations, list) and violations, "mode contract: expected policy_violations for write-like query")
+    first = violations[0] if violations else {}
+    assert_true(first.get("capability") == "query", "mode contract: expected capability=query violation")
+    assert_true(first.get("blocked_action") == "repo_write", "mode contract: expected blocked_action=repo_write")
+    uncertainty = payload.get("uncertainty", [])
+    assert_true(
+        any("read-only" in str(item).lower() and "blocked" in str(item).lower() for item in uncertainty),
+        "mode contract: expected explicit read-only boundary note in uncertainty",
+    )
+    after = snapshot_repo_files(repo_root)
+    assert_true(before == after, "mode contract: adversarial query must not modify repository files")
+
+
+def gate_query_action_orchestration(repo_root: Path) -> None:
+    payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--llm-provider",
+                "mock",
+                "--repo-root",
+                str(repo_root),
+                "query",
+                "standard",
+                "compute_price",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    orchestration = payload.get("sections", {}).get("action_orchestration", {})
+    assert_true(isinstance(orchestration, dict) and orchestration, "orchestration: expected action_orchestration section")
+    done_reason = orchestration.get("done_reason")
+    assert_true(
+        done_reason in {"sufficient_evidence", "budget_exhausted", "policy_blocked"},
+        "orchestration: invalid done_reason",
+    )
+    usage = orchestration.get("usage", {})
+    assert_true(isinstance(usage, dict), "orchestration: usage must be object")
+    decisions = orchestration.get("decisions", [])
+    assert_true(isinstance(decisions, list), "orchestration: decisions must be list")
+    if decisions:
+        first = decisions[0]
+        assert_true(isinstance(first, dict), "orchestration: first decision must be object")
+        assert_true(first.get("decision") in {"continue", "stop"}, "orchestration: invalid decision value")
+        assert_true(isinstance(first.get("reason"), str), "orchestration: reason must be string")
+        assert_true(first.get("confidence") in {"low", "medium", "high"}, "orchestration: invalid confidence value")
+
+
 def gate_effect_boundaries(repo_root: Path) -> None:
     before = snapshot_repo_files(repo_root)
     read_only_commands = [
@@ -1311,6 +1385,8 @@ def run_all_gates() -> None:
         gate_llm_observability_redaction(temp_repo)
         gate_evidence_quality(temp_repo)
         gate_explain_structured_synthesis(temp_repo)
+        gate_mode_capability_contract_query_read_only(temp_repo)
+        gate_query_action_orchestration(temp_repo)
         gate_effect_boundaries(temp_repo)
         gate_fallback_with_and_without_index(temp_repo)
         gate_frontend_fixture(temp_repo_frontend)

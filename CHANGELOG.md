@@ -11,6 +11,8 @@ All notable changes to Forge should be documented in this file.
 - feature 025: `--from-run` support for `explain`/`review`/`test`/`describe` with deterministic payload resolution and provenance metadata
 - feature 024: `forge runs prune` with `--dry-run`, retention criteria (`--keep-last`, `--older-than-days`), config defaults, and safe JSONL rewrite
 - feature 021: structured explain synthesis with `evidence_facts`, `inference_points`, `confidence`, and detailed `role_hypothesis_alternatives`
+- feature 036: central mode capability contract with query read-only boundary enforcement and visible policy-violation events
+- feature 037: bounded LLM query action orchestration with allowed action catalog, decision contract, budget limits, and explicit done reasons
 
 ### Changed
 - issue 1: contributor guidance now requires changelog entries with feature/issue reference for each change

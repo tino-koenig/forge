@@ -45,8 +45,8 @@ Status values:
 | 033 | Log Filtering and LLM Query Analytics | 2026-04-03 | defined | - | [033-log-filtering-and-llm-query-analytics.md](/Users/tino/PhpstormProjects/forge/docs/features/033-log-filtering-and-llm-query-analytics.md) |
 | 034 | Log Redaction and Privacy Guards | 2026-04-03 | defined | - | [034-log-redaction-and-privacy-guards.md](/Users/tino/PhpstormProjects/forge/docs/features/034-log-redaction-and-privacy-guards.md) |
 | 035 | LLM Output Language Control | 2026-04-03 | implemented | 2026-04-03 | [035-llm-output-language-control.md](/Users/tino/PhpstormProjects/forge/docs/features/035-llm-output-language-control.md) |
-| 036 | Mode Capability Contract and Read-Only Enforcement | 2026-04-03 | defined | - | [036-mode-capability-contract-and-read-only-enforcement.md](/Users/tino/PhpstormProjects/forge/docs/features/036-mode-capability-contract-and-read-only-enforcement.md) |
-| 037 | Bounded LLM Action Orchestration | 2026-04-03 | defined | - | [037-bounded-llm-action-orchestration.md](/Users/tino/PhpstormProjects/forge/docs/features/037-bounded-llm-action-orchestration.md) |
+| 036 | Mode Capability Contract and Read-Only Enforcement | 2026-04-03 | implemented | 2026-04-03 | [036-mode-capability-contract-and-read-only-enforcement.md](/Users/tino/PhpstormProjects/forge/docs/features/036-mode-capability-contract-and-read-only-enforcement.md) |
+| 037 | Bounded LLM Action Orchestration | 2026-04-03 | implemented | 2026-04-03 | [037-bounded-llm-action-orchestration.md](/Users/tino/PhpstormProjects/forge/docs/features/037-bounded-llm-action-orchestration.md) |
 | 038 | Adaptive Query Retrieval with Explain Feedback | 2026-04-03 | defined | - | [038-adaptive-query-retrieval-with-explain-feedback.md](/Users/tino/PhpstormProjects/forge/docs/features/038-adaptive-query-retrieval-with-explain-feedback.md) |
 | 039 | Index Explain Summary Enrichment | 2026-04-03 | defined | - | [039-index-explain-summary-enrichment.md](/Users/tino/PhpstormProjects/forge/docs/features/039-index-explain-summary-enrichment.md) |
 | 040 | Explicit Mode Transition Workflows | 2026-04-03 | defined | - | [040-explicit-mode-transition-workflows.md](/Users/tino/PhpstormProjects/forge/docs/features/040-explicit-mode-transition-workflows.md) |
@@ -58,3 +58,5 @@ Status values:
 - 024: Added runs prune with dry-run, retention criteria, config defaults, and safe rewrite behavior.
 - 025: Added --from-run resolution across explain/review/test/describe with provenance metadata.
 - 035: LLM output language control via CLI/env/TOML and prompt propagation.
+- 036: Added central mode-action contract, executor enforcement wiring, and query planner boundary notes for blocked write intent.
+- 037: Added bounded query action orchestration with catalog decisions, budgets, fallback handling, and done_reason.

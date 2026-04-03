@@ -64,6 +64,22 @@ class QueryPlannerOutcome:
     usage: dict[str, object]
 
 
+@dataclass
+class QueryActionDecision:
+    decision: str
+    next_action: str | None
+    reason: str
+    confidence: str
+
+
+@dataclass
+class QueryActionOrchestrationOutcome:
+    decisions: list[QueryActionDecision]
+    done_reason: str
+    usage: dict[str, object]
+    fallback_reason: str | None
+
+
 def policy_for(capability: Capability, profile: Profile) -> str:
     return POLICY_MATRIX.get((capability, profile), LLMInvocationPolicy.OFF)
 
@@ -90,6 +106,12 @@ def resolve_settings(args, repo_root: Path) -> ResolvedLLMConfig:
             query_planner_max_terms=config.query_planner_max_terms,
             query_planner_max_code_variants=config.query_planner_max_code_variants,
             query_planner_max_latency_ms=config.query_planner_max_latency_ms,
+            query_orchestrator_enabled=config.query_orchestrator_enabled,
+            query_orchestrator_mode=config.query_orchestrator_mode,
+            query_orchestrator_max_iterations=config.query_orchestrator_max_iterations,
+            query_orchestrator_max_files=config.query_orchestrator_max_files,
+            query_orchestrator_max_tokens=config.query_orchestrator_max_tokens,
+            query_orchestrator_max_wall_time_ms=config.query_orchestrator_max_wall_time_ms,
             observability_enabled=config.observability_enabled,
             observability_level=config.observability_level,
             observability_retention_count=config.observability_retention_count,
@@ -233,6 +255,10 @@ def _query_planner_template_path() -> Path:
     return Path(__file__).resolve().parents[1] / "prompts" / "llm" / "query_planner.txt"
 
 
+def _query_action_orchestrator_template_path() -> Path:
+    return Path(__file__).resolve().parents[1] / "prompts" / "llm" / "query_action_orchestrator.txt"
+
+
 def _render_query_planner_prompt(
     *,
     question: str,
@@ -252,6 +278,34 @@ def _render_query_planner_prompt(
         deterministic_terms=", ".join(deterministic_terms[:16]),
         max_terms=str(settings.query_planner_max_terms),
         max_code_variants=str(settings.query_planner_max_code_variants),
+    )
+    return prompt, None
+
+
+def _render_query_action_orchestrator_prompt(
+    *,
+    question: str,
+    candidate_paths: list[str],
+    evidence_count: int,
+    iteration: int,
+    max_iterations: int,
+    max_files: int,
+    max_tokens: int,
+    max_wall_time_ms: int,
+) -> tuple[str | None, str | None]:
+    path = _query_action_orchestrator_template_path()
+    if not path.exists():
+        return None, f"missing prompt template: {path}"
+    raw = path.read_text(encoding="utf-8")
+    prompt = Template(raw).safe_substitute(
+        question=question,
+        candidate_paths=", ".join(candidate_paths[:10]),
+        evidence_count=str(evidence_count),
+        iteration=str(iteration),
+        max_iterations=str(max_iterations),
+        max_files=str(max_files),
+        max_tokens=str(max_tokens),
+        max_wall_time_ms=str(max_wall_time_ms),
     )
     return prompt, None
 
@@ -609,6 +663,158 @@ def maybe_plan_query_terms(
             entity_types=[],
             dropped_filler_terms=[],
         )
+
+
+def maybe_orchestrate_query_actions(
+    *,
+    capability: Capability,
+    profile: Profile,
+    question: str,
+    candidate_paths: list[str],
+    evidence_count: int,
+    settings: ResolvedLLMConfig,
+    repo_root: Path | None = None,
+) -> QueryActionOrchestrationOutcome:
+    action_catalog = ["search", "read", "explain", "rank", "summarize", "stop"]
+    usage: dict[str, object] = {
+        "enabled": settings.query_orchestrator_enabled,
+        "mode": settings.query_orchestrator_mode,
+        "attempted": False,
+        "used": False,
+        "provider": settings.provider,
+        "model": settings.model,
+        "prompt_template": str(_query_action_orchestrator_template_path().relative_to(Path(__file__).resolve().parents[1])),
+        "latency_ms": None,
+        "fallback_reason": None,
+        "max_iterations": settings.query_orchestrator_max_iterations,
+        "max_files": settings.query_orchestrator_max_files,
+        "max_tokens": settings.query_orchestrator_max_tokens,
+        "max_wall_time_ms": settings.query_orchestrator_max_wall_time_ms,
+        "catalog": action_catalog,
+    }
+    decisions: list[QueryActionDecision] = []
+
+    def _finish(done_reason: str, fallback_reason: str | None = None) -> QueryActionOrchestrationOutcome:
+        if fallback_reason:
+            usage["fallback_reason"] = fallback_reason
+        log_llm_event(
+            repo_root=repo_root,
+            settings=settings,
+            capability=capability,
+            profile=profile,
+            stage="query_action_orchestrator",
+            task=question,
+            usage=usage,
+            extra={
+                "done_reason": done_reason,
+                "decision_count": len(decisions),
+                "candidate_count": len(candidate_paths),
+                "evidence_count": evidence_count,
+            },
+        )
+        return QueryActionOrchestrationOutcome(
+            decisions=decisions,
+            done_reason=done_reason,
+            usage=usage,
+            fallback_reason=fallback_reason,
+        )
+
+    if not settings.query_orchestrator_enabled or settings.query_orchestrator_mode == "off":
+        return _finish("sufficient_evidence", "query action orchestrator disabled by config")
+    if settings.mode == "off":
+        return _finish("sufficient_evidence", "llm disabled by cli mode")
+    if settings.provider is None:
+        return _finish("sufficient_evidence", "no llm provider configured")
+    if settings.validation_error:
+        return _finish("policy_blocked", f"config validation error: {settings.validation_error}")
+
+    usage["attempted"] = True
+    started = time.perf_counter()
+    try:
+        raw_result: dict[str, object]
+        if settings.provider == "mock":
+            raw_result = {
+                "decision": "stop" if evidence_count >= 5 else "continue",
+                "next_action": None if evidence_count >= 5 else "read",
+                "reason": "sufficient evidence for summary" if evidence_count >= 5 else "need a bit more direct evidence",
+                "confidence": "high" if evidence_count >= 5 else "medium",
+            }
+        elif settings.provider == "openai_compatible":
+            prompt, prompt_error = _render_query_action_orchestrator_prompt(
+                question=question,
+                candidate_paths=candidate_paths,
+                evidence_count=evidence_count,
+                iteration=1,
+                max_iterations=settings.query_orchestrator_max_iterations,
+                max_files=settings.query_orchestrator_max_files,
+                max_tokens=settings.query_orchestrator_max_tokens,
+                max_wall_time_ms=settings.query_orchestrator_max_wall_time_ms,
+            )
+            if prompt_error:
+                return _finish("policy_blocked", prompt_error)
+            assert prompt is not None
+            if (settings.base_url or "").startswith("mock://"):
+                raw_result = {
+                    "decision": "stop" if evidence_count >= 5 else "continue",
+                    "next_action": None if evidence_count >= 5 else "read",
+                    "reason": "mock orchestration decision",
+                    "confidence": "medium",
+                }
+            else:
+                system_prompt, system_error = _load_system_prompt(settings.system_template_path)
+                if system_error:
+                    return _finish("policy_blocked", system_error)
+                assert system_prompt is not None
+                timeout_s = min(settings.timeout_s, max(settings.query_orchestrator_max_wall_time_ms / 1000.0, 0.2))
+                raw = _openai_compatible_complete(
+                    settings=settings,
+                    system_prompt=system_prompt,
+                    user_prompt=prompt,
+                    timeout_s=timeout_s,
+                )
+                raw_result = _extract_json_object(raw)
+        else:
+            return _finish("policy_blocked", f"provider '{settings.provider}' is not supported")
+
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        usage["latency_ms"] = latency_ms
+        if latency_ms > settings.query_orchestrator_max_wall_time_ms:
+            return _finish(
+                "budget_exhausted",
+                f"orchestrator latency {latency_ms}ms exceeds max {settings.query_orchestrator_max_wall_time_ms}ms",
+            )
+
+        decision = str(raw_result.get("decision", "")).strip().lower()
+        next_action_raw = raw_result.get("next_action")
+        next_action = str(next_action_raw).strip().lower() if isinstance(next_action_raw, str) else None
+        reason = str(raw_result.get("reason", "")).strip()
+        confidence = str(raw_result.get("confidence", "")).strip().lower()
+        if confidence not in {"low", "medium", "high"}:
+            confidence = "medium"
+        if decision not in {"continue", "stop"}:
+            return _finish("policy_blocked", f"invalid orchestration decision '{decision}'")
+        if decision == "continue":
+            if next_action is None:
+                return _finish("policy_blocked", "orchestration continue decision missing next_action")
+            if next_action not in action_catalog or next_action == "stop":
+                return _finish("policy_blocked", f"orchestration next_action '{next_action}' is not allowed")
+        else:
+            next_action = None
+        decisions.append(
+            QueryActionDecision(
+                decision=decision,
+                next_action=next_action,
+                reason=reason or "no reason provided",
+                confidence=confidence,
+            )
+        )
+        usage["used"] = True
+        if decision == "stop":
+            return _finish("sufficient_evidence")
+        return _finish("sufficient_evidence")
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        usage["latency_ms"] = int((time.perf_counter() - started) * 1000)
+        return _finish("policy_blocked", f"orchestrator failure: {exc}")
 
 
 def maybe_refine_summary(

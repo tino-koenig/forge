@@ -8,11 +8,13 @@ from core.analysis_primitives import load_index_path_class_map, path_class_weigh
 from core.capability_model import CommandRequest, Profile
 from core.effects import ExecutionSession
 from core.llm_integration import (
+    maybe_orchestrate_query_actions,
     maybe_plan_query_terms,
     maybe_refine_summary,
     provenance_section,
     resolve_settings,
 )
+from core.mode_capability_contract import evaluate_action_eligibility
 from core.output_contracts import build_contract, emit_contract_json
 from core.output_views import is_compact, is_full, resolve_view
 from core.repo_io import iter_repo_files, read_text_file
@@ -144,6 +146,31 @@ LANGUAGE_HINTS_EN = {
     "entry",
     "point",
     "main",
+}
+
+WRITE_REQUEST_HINTS = {
+    "fix",
+    "edit",
+    "change",
+    "rewrite",
+    "update",
+    "patch",
+    "implement",
+    "refactor",
+    "delete",
+    "remove",
+    "replace",
+    "schreib",
+    "aender",
+    "ändere",
+    "anpassen",
+    "lösch",
+    "loesch",
+    "ersetz",
+    "korrigier",
+    "fixe",
+    "implementier",
+    "refaktor",
 }
 
 DE_TO_EN_TERM_MAP = {
@@ -364,6 +391,17 @@ def has_entrypoint_intent(question: str) -> bool:
     if any(phrase in lowered for phrase in ENTRYPOINT_PHRASES):
         return True
     return "main" in lowered and "entry" in lowered
+
+
+def has_write_request_intent(question: str) -> bool:
+    lowered = question.lower()
+    if any(token in lowered for token in ("write ", "modify ", "create ", "apply patch", "git add", "commit ")):
+        return True
+    tokens = re.findall(r"[A-Za-z0-9_./-]+", lowered)
+    for token in tokens:
+        if any(hint in token for hint in WRITE_REQUEST_HINTS):
+            return True
+    return False
 
 
 def collect_matches(
@@ -617,6 +655,16 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
 
     repo_root = Path(args.repo_root).resolve()
     question = normalize_question(request.payload)
+    policy_violations: list[dict[str, object]] = []
+    if has_write_request_intent(question):
+        violation = evaluate_action_eligibility(
+            capability=request.capability,
+            action="repo_write",
+            phase="planner",
+            detail="query mode is read-only; write-like user intent was blocked",
+        )
+        if violation is not None:
+            policy_violations.append(violation.to_dict())
     llm_settings = resolve_settings(args, repo_root)
     query_input_mode = getattr(args, "query_input_mode", "planner")
     cross_lingual = build_cross_lingual_expansion(question, request.profile)
@@ -691,7 +739,6 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     if request.profile == Profile.DETAILED and candidates:
         detailed_lines = enrich_detailed_context(repo_root, candidates, session)
 
-    summary = format_summary(question, candidates)
     evidence_payload: list[dict[str, object]] = []
     for candidate in candidates[:5]:
         for item in candidate.evidences[:3]:
@@ -703,6 +750,44 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                     "term": item.term,
                 }
             )
+    orchestration = maybe_orchestrate_query_actions(
+        capability=request.capability,
+        profile=request.profile,
+        question=question,
+        candidate_paths=[str(item.path) for item in candidates[:12]],
+        evidence_count=len(evidence_payload),
+        settings=llm_settings,
+        repo_root=repo_root,
+    )
+    if orchestration.decisions:
+        first_decision = orchestration.decisions[0]
+        if first_decision.decision == "continue" and first_decision.next_action == "read" and candidates:
+            bounded_details = enrich_detailed_context(
+                repo_root,
+                candidates[: max(1, min(len(candidates), llm_settings.query_orchestrator_max_files))],
+                session,
+            )
+            extra_limit = min(len(bounded_details), llm_settings.query_orchestrator_max_tokens // 40)
+            for raw in bounded_details[:extra_limit]:
+                if raw.count(":") < 2:
+                    continue
+                path_part, line_part, text_part = raw.split(":", 2)
+                try:
+                    line_no = int(line_part)
+                except ValueError:
+                    continue
+                evidence_payload.append(
+                    {
+                        "path": path_part.strip(),
+                        "line": line_no,
+                        "text": text_part.strip(),
+                        "term": "orchestrator_read",
+                    }
+                )
+            if bounded_details:
+                detailed_lines.extend(bounded_details[:12])
+
+    summary = format_summary(question, candidates)
     uncertainty = ["Results are based on lexical matching and heuristic ranking."]
     if request.profile == Profile.SIMPLE:
         uncertainty.append("Simple profile does not use index-assisted prioritization.")
@@ -715,6 +800,14 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         )
     if not candidates:
         uncertainty.append("No strong candidate files were detected.")
+    if policy_violations:
+        uncertainty.append(
+            "Mode boundary enforced: query is read-only; write request was blocked and analysis continued read-only."
+        )
+    if orchestration.done_reason == "budget_exhausted":
+        uncertainty.append("Query action orchestration hit configured budget limits.")
+    if orchestration.done_reason == "policy_blocked":
+        uncertainty.append("Query action orchestration decision was rejected; deterministic fallback was used.")
     next_step = (
         f"Run: forge explain {candidates[0].path}"
         if candidates
@@ -778,6 +871,27 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                 }
             ),
         },
+        "policy_violations": policy_violations,
+        "action_orchestration": {
+            "catalog": ["search", "read", "explain", "rank", "summarize", "stop"],
+            "budgets": {
+                "max_iterations": llm_settings.query_orchestrator_max_iterations,
+                "max_files": llm_settings.query_orchestrator_max_files,
+                "max_tokens": llm_settings.query_orchestrator_max_tokens,
+                "max_wall_time_ms": llm_settings.query_orchestrator_max_wall_time_ms,
+            },
+            "decisions": [
+                {
+                    "decision": d.decision,
+                    "next_action": d.next_action,
+                    "reason": d.reason,
+                    "confidence": d.confidence,
+                }
+                for d in orchestration.decisions
+            ],
+            "done_reason": orchestration.done_reason,
+            "usage": orchestration.usage,
+        },
     }
     if detailed_lines:
         sections["detailed_context"] = detailed_lines[:20]
@@ -803,6 +917,16 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         cross_lingual,
         planner.normalized_question_en if planner is not None else None,
     )
+    if policy_violations:
+        print("\n--- Mode Boundary ---")
+        for item in policy_violations:
+            print(
+                f"Blocked action '{item.get('blocked_action')}' "
+                f"for capability '{item.get('capability')}' at phase '{item.get('phase')}'."
+            )
+            detail = item.get("detail")
+            if isinstance(detail, str) and detail:
+                print(f"Reason: {detail}")
     if is_full(view):
         print("\n--- Query Planner ---")
         planner_usage = (
@@ -835,6 +959,19 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             print(f"Code variants: {', '.join(planner.code_variants[:8])}")
         if planner_usage.get("fallback_reason"):
             print(f"Fallback: {planner_usage['fallback_reason']}")
+
+        print("\n--- Action Orchestration ---")
+        print(f"Done reason: {orchestration.done_reason}")
+        if orchestration.decisions:
+            for idx, decision in enumerate(orchestration.decisions, start=1):
+                print(
+                    f"{idx}. decision={decision.decision} "
+                    f"next_action={decision.next_action or '-'} "
+                    f"confidence={decision.confidence}"
+                )
+                print(f"   reason: {decision.reason}")
+        if orchestration.usage.get("fallback_reason"):
+            print(f"Fallback: {orchestration.usage['fallback_reason']}")
 
         print("\n--- LLM Usage ---")
         print(f"Policy: {llm_outcome.usage['policy']}")

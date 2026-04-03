@@ -179,12 +179,16 @@ notes = "LLM output language control via CLI/env/TOML and prompt propagation."
 
 [[feature]]
 id = "036"
-status = "defined"
+status = "implemented"
+implemented_on = "2026-04-03"
+notes = "Added central mode-action contract, executor enforcement wiring, and query planner boundary notes for blocked write intent."
 defined_on = "2026-04-03"
 
 [[feature]]
 id = "037"
-status = "defined"
+status = "implemented"
+implemented_on = "2026-04-03"
+notes = "Added bounded query action orchestration with catalog decisions, budgets, fallback handling, and done_reason."
 defined_on = "2026-04-03"
 
 [[feature]]
