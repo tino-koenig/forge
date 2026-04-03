@@ -2,10 +2,10 @@
 
 ## Description
 
-This feature improves `forge explain` output quality by enforcing a strict structure:
-- evidence
-- inference
-- uncertainty/confidence
+This feature improves `forge explain` output quality by enforcing explicit separation between:
+- evidence (what is directly observable)
+- inference (what is interpreted from evidence)
+- uncertainty/confidence (how certain the interpretation is)
 
 LLM is used only for synthesis and clarity, not for evidence discovery.
 
@@ -53,13 +53,23 @@ Add explain JSON sections:
 - `confidence`
 - `role_hypothesis_alternatives` (detailed profile)
 
-Text output should mirror the same structure in concise sections.
+Text output requirements:
+- `standard` view stays human-first and concise (no verbose contract dump)
+- `full` view mirrors the structured sections in readable blocks
+- `compact` keeps only a compressed summary + top evidence anchors
 
 ### Safety and transparency
 
 - no write effects
 - no hidden chain-of-thought exposure
 - confidence claims must be linked to visible evidence density/signals
+
+### Alignment with current Forge direction
+
+- This feature extends existing explain behavior; it does not replace human-first defaults.
+- Structured richness is primarily guaranteed in JSON contracts.
+- Text mode remains optimized for readability first, with deeper structure in `full`.
+- No effect-boundary changes: capability remains read-only.
 
 ## Design
 
@@ -82,3 +92,4 @@ Separating evidence from inference makes LLM value visible and safer.
   - no fabricated file references
   - inference always backed by at least one evidence anchor
   - contract shape for explain structured sections
+  - text `standard` view remains concise and human-first

@@ -136,8 +136,9 @@ When adding new functionality:
 
 ### Change tracking (mandatory)
 - Every implementation change must be mapped to at least one Feature ID (`docs/features/...`) or Issue ID (`docs/issues/...`).
-- Every implementation change must be documented in `CHANGELOG.md`.
+- Product/application changes must be documented in `CHANGELOG.md`.
 - Changelog entries must explicitly include the referenced Feature ID or Issue ID.
+- Documentation-only updates (feature specs, roadmap text, wording cleanups) do not require `CHANGELOG.md` entries.
 - If no matching Feature/Issue exists yet, define one first and then reference it in the changelog entry.
 
 ## Definition of success
