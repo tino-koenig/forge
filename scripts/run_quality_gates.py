@@ -137,6 +137,17 @@ def gate_behavior_smoke(repo_root: Path) -> None:
         run_cmd(cmd, cwd=ROOT)
 
 
+def gate_module_invocation_compat(repo_root: Path) -> None:
+    run_cmd(
+        ["python3", "-m", "forge", "--repo-root", str(repo_root), "doctor"],
+        cwd=ROOT,
+    )
+    run_cmd(
+        ["python3", "-m", "forge", "--output-format", "json", "--repo-root", str(repo_root), "query", "compute_price"],
+        cwd=ROOT,
+    )
+
+
 def gate_output_contract(repo_root: Path) -> None:
     doctor_out = run_cmd(
         ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "doctor"],
@@ -1793,6 +1804,7 @@ def run_all_gates() -> None:
         shutil.copytree(FIXTURE_BASIC_SRC, temp_repo_rules_invalid)
 
         gate_behavior_smoke(temp_repo)
+        gate_module_invocation_compat(temp_repo)
         gate_output_contract(temp_repo)
         gate_llm_path(temp_repo)
         gate_llm_contract_parity(temp_repo)

@@ -139,6 +139,25 @@ forge --view compact query "find main entry point"
 forge --details review src/service.py
 ```
 
+## Development Setup
+
+Recommended local development flow:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
+forge doctor
+```
+
+Primary dev invocation:
+- `forge <mode> ...`
+
+Compatibility invocation:
+- `python -m forge <mode> ...`
+- `python forge.py <mode> ...` (legacy compatibility path)
+
 ## Human-First Output Views
 
 Text output supports explicit view modes:

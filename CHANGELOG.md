@@ -17,6 +17,7 @@ All notable changes to Forge should be documented in this file.
 - feature 039: index explain-summary enrichment metadata with incremental recomputation and query-side read-only consumption
 - feature 040: explicit mode-transition policy graph with transition gates, confirmation control, and traceable from-run transition metadata
 - feature 045: run history now always stores structured `output.contract` across text and json capability runs
+- feature 041: added packaging-based development invocation model (`forge` console script + `python -m forge` compatibility)
 
 ### Changed
 - issue 1: contributor guidance now requires changelog entries with feature/issue reference for each change

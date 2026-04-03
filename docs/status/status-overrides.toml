@@ -214,8 +214,10 @@ notes = "Added explicit transition policy graph and gate enforcement for --from-
 
 [[feature]]
 id = "041"
-status = "defined"
+status = "implemented"
 defined_on = "2026-04-03"
+implemented_on = "2026-04-03"
+notes = "Added pyproject console script (`forge`), module entrypoint (`python -m forge`), and documented editable-install dev workflow."
 
 [[feature]]
 id = "042"

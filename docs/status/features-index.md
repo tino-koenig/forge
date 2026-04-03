@@ -50,7 +50,7 @@ Status values:
 | 038 | Adaptive Query Retrieval with Explain Feedback | 2026-04-03 | implemented | 2026-04-03 | [038-adaptive-query-retrieval-with-explain-feedback.md](/Users/tino/PhpstormProjects/forge/docs/features/038-adaptive-query-retrieval-with-explain-feedback.md) |
 | 039 | Index Explain Summary Enrichment | 2026-04-03 | implemented | 2026-04-03 | [039-index-explain-summary-enrichment.md](/Users/tino/PhpstormProjects/forge/docs/features/039-index-explain-summary-enrichment.md) |
 | 040 | Explicit Mode Transition Workflows | 2026-04-03 | implemented | 2026-04-03 | [040-explicit-mode-transition-workflows.md](/Users/tino/PhpstormProjects/forge/docs/features/040-explicit-mode-transition-workflows.md) |
-| 041 | Development Installation and Invocation Model | 2026-04-03 | defined | - | [041-development-installation-and-invocation-model.md](/Users/tino/PhpstormProjects/forge/docs/features/041-development-installation-and-invocation-model.md) |
+| 041 | Development Installation and Invocation Model | 2026-04-03 | implemented | 2026-04-03 | [041-development-installation-and-invocation-model.md](/Users/tino/PhpstormProjects/forge/docs/features/041-development-installation-and-invocation-model.md) |
 | 042 | Workstation Installation and Pipx Distribution | 2026-04-03 | defined | - | [042-workstation-installation-and-pipx-distribution.md](/Users/tino/PhpstormProjects/forge/docs/features/042-workstation-installation-and-pipx-distribution.md) |
 | 043 | Repository Context Discovery via Forge Marker | 2026-04-03 | defined | - | [043-repository-context-discovery-via-forge-marker.md](/Users/tino/PhpstormProjects/forge/docs/features/043-repository-context-discovery-via-forge-marker.md) |
 | 044 | Forge Init Team Templates and Interactive Onboarding | 2026-04-03 | defined | - | [044-forge-init-team-templates-and-interactive-onboarding.md](/Users/tino/PhpstormProjects/forge/docs/features/044-forge-init-team-templates-and-interactive-onboarding.md) |
@@ -68,4 +68,5 @@ Status values:
 - 038: Query now applies explain-derived relevance signals for reranking and bounded continuation on low confidence.
 - 039: Index now stores optional explain summary metadata with incremental recomputation; query consumes summaries read-only.
 - 040: Added explicit transition policy graph and gate enforcement for --from-run workflows with traceable transition metadata and confirmation policy.
+- 041: Added pyproject console script (`forge`), module entrypoint (`python -m forge`), and documented editable-install dev workflow.
 - 045: Run history now persists structured output.contract for every non-runs capability execution (text and json modes).
