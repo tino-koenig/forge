@@ -3955,6 +3955,70 @@ def gate_explain_facet_quality_matrix(repo_root: Path) -> None:
     )
 
 
+def gate_explain_output_surface_precision(repo_root: Path) -> None:
+    mention_only = repo_root / "src" / "output_mentions_only.py"
+    mention_only.write_text(
+        "\n".join(
+            [
+                "def describe_paths() -> str:",
+                "    return \"status mentions .forge/logs/events.jsonl but does not write it\"",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--llm-provider",
+                "mock",
+                "--repo-root",
+                str(repo_root),
+                "explain:outputs",
+                "src/output_mentions_only.py",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    surfaces = payload.get("sections", {}).get("output_surfaces", [])
+    assert_true(isinstance(surfaces, list), "explain outputs precision: expected output_surfaces list")
+    assert_true(
+        len(surfaces) == 0,
+        "explain outputs precision: passive path-string mentions must not be classified as output producers",
+    )
+
+    query_payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--llm-provider",
+                "mock",
+                "--repo-root",
+                str(repo_root),
+                "explain:outputs",
+                "modes/query.py",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    query_surfaces = query_payload.get("sections", {}).get("output_surfaces", [])
+    assert_true(isinstance(query_surfaces, list), "explain outputs precision: expected query output_surfaces list")
+    assert_true(
+        all(
+            isinstance(item, dict)
+            and str(item.get("producer") or "").lower() not in {"path includes .forge/", "path includes .jsonl"}
+            for item in query_surfaces
+        ),
+        "explain outputs precision: output surfaces must be backed by producer semantics",
+    )
+
+
 def gate_mode_capability_contract_query_read_only(repo_root: Path) -> None:
     before = snapshot_repo_files(repo_root)
     payload = parse_json_output(
@@ -4539,6 +4603,7 @@ def run_all_gates() -> None:
         gate_evidence_quality(temp_repo)
         gate_explain_structured_synthesis(temp_repo)
         gate_explain_facet_quality_matrix(temp_repo)
+        gate_explain_output_surface_precision(temp_repo)
         gate_mode_capability_contract_query_read_only(temp_repo)
         gate_query_action_orchestration(temp_repo)
         gate_adaptive_query_explain_feedback(temp_repo)

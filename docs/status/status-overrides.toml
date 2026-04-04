@@ -497,6 +497,13 @@ defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Added explain facet quality-gate matrix with alias/flag parity, facet section contracts, direction/scope checks, and conflict negative tests."
 
+[[feature]]
+id = "082"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Tightened explain:outputs to producer-only evidence and added regression coverage against passive path-mention false positives."
+
 # Issue examples:
 # [[issue]]
 # id = "12"
@@ -602,6 +609,13 @@ status = "implemented"
 defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Added dedicated explain facet regression matrix gate covering alias/flag parity, direction/scope contracts, and conflict negatives."
+
+[[issue]]
+id = "25"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Explain output-surface detection now requires producer semantics and is protected by a mention-only false-positive regression gate."
 
 [[issue]]
 id = "6"

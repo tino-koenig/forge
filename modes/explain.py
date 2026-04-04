@@ -510,9 +510,17 @@ def extract_output_surfaces(rel_target: Path, content: str) -> list[OutputSurfac
         (re.compile(r"\bemit_contract_json\("), "json_contract", "contract_json", "emit_contract_json(...)", "high"),
         (re.compile(r"\bwrite_forge_file\("), "artifact_file", ".forge artifact", "write_forge_file(...)", "high"),
         (re.compile(r"\blog_llm_event\("), "log_file", ".forge/logs/llm_observability.jsonl", "log_llm_event(...)", "high"),
+        (re.compile(r"\bappend_protocol_events\("), "log_file", ".forge/logs/events.jsonl", "append_protocol_events(...)", "high"),
         (re.compile(r"\bappend_run\("), "artifact_file", "run_history", "append_run(...)", "medium"),
-        (re.compile(r"\.jsonl"), "log_file", "jsonl output", "path includes .jsonl", "medium"),
-        (re.compile(r"\.forge/"), "artifact_file", ".forge/*", "path includes .forge/", "medium"),
+        (re.compile(r"\.write_text\("), "artifact_file", "file_write", "write_text(...)", "high"),
+        (re.compile(r"\.write_bytes\("), "artifact_file", "file_write", "write_bytes(...)", "high"),
+        (
+            re.compile(r"\.open\(\s*[^,]+,\s*['\"](?:w|a|x|wb|ab|xb)['\"]"),
+            "artifact_file",
+            "file_open_write",
+            "open(..., write-mode)",
+            "medium",
+        ),
     ]
     items: list[OutputSurface] = []
     seen: set[tuple[str, str]] = set()
