@@ -15,12 +15,17 @@ from datetime import datetime
 from pathlib import Path
 import re
 import subprocess
+import sys
 from typing import Any
 
-import tomli
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from core.toml_compat import tomli
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = REPO_ROOT
 FEATURE_DIR = ROOT / "docs" / "features"
 ISSUE_DIR = ROOT / "docs" / "issues"
 STATUS_DIR = ROOT / "docs" / "status"

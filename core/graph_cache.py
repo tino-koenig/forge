@@ -8,7 +8,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-import tomli
+from core.toml_compat import tomli
 
 from core.capability_model import EffectClass
 from core.effects import ExecutionSession

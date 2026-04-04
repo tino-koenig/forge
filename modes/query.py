@@ -22,7 +22,7 @@ from core.mode_orchestrator import iter_bounded_cycles
 from core.output_contracts import build_contract, emit_contract_json
 from core.output_views import is_compact, is_full, resolve_view
 from core.repo_io import TEXT_FILE_EXTENSIONS, iter_repo_files, read_text_file
-import tomli
+from core.toml_compat import tomli
 
 
 STOP_WORDS = {

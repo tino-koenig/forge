@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import tomli
+from core.toml_compat import tomli
 
 
 TRANSITION_POLICY_GRAPH: dict[str, frozenset[str]] = {

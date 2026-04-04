@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-import tomli
+from core.toml_compat import tomli
 
 
 @dataclass(frozen=True)

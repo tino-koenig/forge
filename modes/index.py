@@ -7,7 +7,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-import tomli
+from core.toml_compat import tomli
 from core.capability_model import CommandRequest, EffectClass
 from core.effects import ExecutionSession
 from core.graph_cache import build_repo_graph, load_repo_graph_with_warnings

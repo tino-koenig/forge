@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-import tomli
+from core.toml_compat import tomli
 from core.capability_model import Capability, CommandRequest, Profile
 from core.effects import ExecutionSession
 from core.output_contracts import build_contract, emit_contract_json

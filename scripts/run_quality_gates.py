@@ -45,7 +45,7 @@ from core.protocol_analytics_foundation import build_run_totals as build_protoco
 from core.protocol_analytics_foundation import stats_payload as build_protocol_stats_payload
 from core.protocol_log import append_protocol_events
 from forge_cmd.cli import build_parser
-import tomli
+from core.toml_compat import tomli
 
 FORGE = ROOT / "forge.py"
 FIXTURE_BASIC_SRC = ROOT / "tests" / "fixtures" / "basic_repo"

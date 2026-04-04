@@ -9,7 +9,7 @@ from pathlib import Path
 import os
 from typing import Any
 
-import tomli
+from core.toml_compat import tomli
 from core.prompt_profiles import ALLOWED_PROMPT_PROFILES
 
 _CONFIG_SCHEMA: dict[str, Any] = {

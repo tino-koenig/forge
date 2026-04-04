@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-import tomli
+from core.toml_compat import tomli
 
 from core.runtime_settings_registry import (
     RUNTIME_SETTINGS_REGISTRY,
