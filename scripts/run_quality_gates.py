@@ -18,6 +18,10 @@ from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from core.config import (
     DEFAULT_QUERY_ORCHESTRATOR_MAX_FILES,
     DEFAULT_QUERY_ORCHESTRATOR_MAX_ITERATIONS,
@@ -43,7 +47,6 @@ from core.protocol_log import append_protocol_events
 from forge_cmd.cli import build_parser
 import tomli
 
-ROOT = Path(__file__).resolve().parents[1]
 FORGE = ROOT / "forge.py"
 FIXTURE_BASIC_SRC = ROOT / "tests" / "fixtures" / "basic_repo"
 FIXTURE_FRONTEND_SRC = ROOT / "tests" / "fixtures" / "frontend_repo"
