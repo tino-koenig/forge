@@ -10,6 +10,7 @@ from core.analysis_primitives import load_index_entry_map, load_index_path_class
 from core.capability_model import CommandRequest, EffectClass, Profile
 from core.effects import ExecutionSession
 from core.framework_profiles import FrameworkProfile, load_framework_registry, select_framework_profile
+from core.graph_cache import load_framework_graph_references, load_repo_graph
 from core.llm_integration import (
     maybe_orchestrate_query_actions,
     maybe_plan_query_terms,
@@ -206,7 +207,7 @@ class Evidence:
     line: int
     text: str
     term: str
-    source: str = "content_match"  # content_match | path_match | symbol_match | summary_match
+    source: str = "content_match"  # content_match | path_match | symbol_match | summary_match | graph_match
     weight: int = 1
 
 
@@ -702,6 +703,99 @@ def _collect_framework_local_matches(
     return results, source_meta, warnings
 
 
+def _collect_graph_matches(
+    *,
+    terms: list[str],
+    term_weights: dict[str, int],
+    repo_graph: dict[str, object] | None,
+    framework_graphs: dict[str, dict[str, object]],
+) -> tuple[dict[str, list[Evidence]], dict[str, SourceMetadata]]:
+    if not terms:
+        return {}, {}
+    matches: dict[str, list[Evidence]] = {}
+    source_meta: dict[str, SourceMetadata] = {}
+
+    def process_graph(graph: dict[str, object], *, fallback_source_type: str, framework_ref: str | None = None) -> None:
+        nodes_raw = graph.get("nodes")
+        edges_raw = graph.get("edges")
+        if not isinstance(nodes_raw, list) or not isinstance(edges_raw, list):
+            return
+        node_map: dict[str, dict[str, object]] = {}
+        for node in nodes_raw:
+            if isinstance(node, dict) and isinstance(node.get("id"), str):
+                node_map[str(node["id"])] = node
+        for edge in edges_raw:
+            if not isinstance(edge, dict):
+                continue
+            src_id = edge.get("source")
+            tgt_id = edge.get("target")
+            kind = edge.get("kind")
+            if not isinstance(src_id, str) or not isinstance(tgt_id, str) or not isinstance(kind, str):
+                continue
+            src_node = node_map.get(src_id, {})
+            tgt_node = node_map.get(tgt_id, {})
+            src_path = src_node.get("path") if isinstance(src_node.get("path"), str) else None
+            tgt_path = tgt_node.get("path") if isinstance(tgt_node.get("path"), str) else None
+            evidence_payload = edge.get("evidence")
+            evidence_line = 0
+            evidence_text = ""
+            if isinstance(evidence_payload, list) and evidence_payload:
+                first = evidence_payload[0]
+                if isinstance(first, dict):
+                    if isinstance(first.get("line"), int):
+                        evidence_line = int(first.get("line"))
+                    if isinstance(first.get("text"), str):
+                        evidence_text = first.get("text") or ""
+            search_blob = " ".join(
+                part
+                for part in [
+                    str(kind),
+                    str(src_path or ""),
+                    str(tgt_path or ""),
+                    str(edge.get("detector") or ""),
+                    str(evidence_text),
+                    str(tgt_node.get("package") or ""),
+                ]
+                if part
+            ).lower()
+            edge_hits = [term for term in terms if term in search_blob]
+            if not edge_hits:
+                continue
+            best_term = max(edge_hits, key=lambda item: (term_weights.get(item, 1), len(item)))
+            weight = max(1, term_weights.get(best_term, 1)) * 5
+            rendered = f"graph edge {kind}: {(src_path or src_id)} -> {(tgt_path or tgt_id)}"
+            for path in (src_path, tgt_path):
+                if not path:
+                    continue
+                evidences = matches.setdefault(path, [])
+                evidences.append(
+                    Evidence(
+                        line=evidence_line,
+                        text=rendered,
+                        term=best_term,
+                        source="graph_match",
+                        weight=weight,
+                    )
+                )
+                if fallback_source_type == "framework" and path not in source_meta:
+                    framework_id = framework_ref.split("@", 1)[0] if framework_ref else None
+                    framework_version = framework_ref.split("@", 1)[1] if framework_ref and "@" in framework_ref else None
+                    source_meta[path] = SourceMetadata(
+                        source_type="framework",
+                        source_origin="framework_graph_ref",
+                        framework_id=framework_id,
+                        framework_version=framework_version,
+                    )
+                else:
+                    source_meta.setdefault(path, SourceMetadata(source_type="repo", source_origin="repo_graph_cache"))
+
+    if repo_graph is not None:
+        process_graph(repo_graph, fallback_source_type="repo")
+    for ref_id, graph in framework_graphs.items():
+        process_graph(graph, fallback_source_type="framework", framework_ref=ref_id)
+    return matches, source_meta
+
+
 def collect_matches(
     root: Path,
     terms: list[str],
@@ -710,6 +804,8 @@ def collect_matches(
     index_entry_map: dict[str, dict[str, object]],
     term_weights: dict[str, int] | None = None,
     framework_profile: FrameworkProfile | None = None,
+    repo_graph: dict[str, object] | None = None,
+    framework_graphs: dict[str, dict[str, object]] | None = None,
 ) -> tuple[dict[str, list[Evidence]], dict[str, SourceMetadata], list[str]]:
     results: dict[str, list[Evidence]] = {}
     source_meta: dict[str, SourceMetadata] = {}
@@ -849,6 +945,17 @@ def collect_matches(
                 continue
             results[path_key] = evidences
             source_meta[path_key] = framework_source_meta[path_key]
+    graph_results, graph_source_meta = _collect_graph_matches(
+        terms=terms,
+        term_weights=weight_map,
+        repo_graph=repo_graph,
+        framework_graphs=framework_graphs or {},
+    )
+    for path_key, evidences in graph_results.items():
+        existing = results.setdefault(path_key, [])
+        existing.extend(evidences[:3])
+        if path_key in graph_source_meta:
+            source_meta.setdefault(path_key, graph_source_meta[path_key])
     return results, source_meta, warnings
 
 
@@ -867,6 +974,7 @@ def score_candidate(
     path_evidences = [item for item in evidences if item.source == "path_match"]
     symbol_evidences = [item for item in evidences if item.source == "symbol_match"]
     summary_evidences = [item for item in evidences if item.source == "summary_match"]
+    graph_evidences = [item for item in evidences if item.source == "graph_match"]
 
     unique_terms = {e.term for e in content_evidences}
     # Code/config content hits are normal-strength baseline evidence.
@@ -883,6 +991,7 @@ def score_candidate(
     symbol_weight = sum(item.weight for item in symbol_evidences)
     score += min(symbol_weight, 36)
     score += min(sum(item.weight for item in summary_evidences), 12)
+    score += min(sum(item.weight for item in graph_evidences), 28)
     if symbol_weight >= 14:
         score += 8
 
@@ -1503,6 +1612,13 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         elif framework_registry.exists:
             print("Framework profile: none selected")
 
+    repo_graph = load_repo_graph(repo_root, session)
+    framework_graphs, framework_graph_warnings = load_framework_graph_references(repo_root, session)
+    framework_warnings.extend(framework_graph_warnings)
+    if repo_graph is None:
+        if request.profile in {Profile.STANDARD, Profile.DETAILED}:
+            framework_warnings.append("graph cache missing (.forge/graph.json); continuing with lexical/index retrieval")
+
     if not is_json and is_full(view):
         print(f"Search terms: {', '.join(terms[:8])}" if terms else "Search terms: none")
     term_weights = build_term_weight_map(terms)
@@ -1513,6 +1629,8 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         index_entry_map=index_entry_map,
         term_weights=term_weights,
         framework_profile=framework_profile,
+        repo_graph=repo_graph,
+        framework_graphs=framework_graphs,
     )
     framework_warnings.extend(source_warnings)
     candidates = rank_candidates_for_query(
@@ -2140,6 +2258,10 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             "framework_docs_roots": [
                 str(path) for path in (framework_profile.framework_docs_roots if framework_profile is not None else [])
             ],
+        },
+        "graph_usage": {
+            "repo_graph_loaded": repo_graph is not None,
+            "framework_graph_refs_loaded": sorted(framework_graphs.keys()),
         },
         "ask": {
             "enabled": ask_mode,

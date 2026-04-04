@@ -254,13 +254,17 @@ notes = "Added `forge init` with template selection, interactive/non-interactive
 
 [[feature]]
 id = "047"
-status = "defined"
+status = "implemented"
 defined_on = "2026-04-03"
+implemented_on = "2026-04-04"
+notes = "Explain now supports directional/source-scoped dependency/resource facets (`--focus`, `--direction`, `--source-scope`) with edge sections (`dependency_edges_out/in`, `resource_edges`) and source typing metadata."
 
 [[feature]]
 id = "048"
-status = "defined"
+status = "implemented"
 defined_on = "2026-04-03"
+implemented_on = "2026-04-04"
+notes = "Added deterministic `.forge/graph.json` edge cache with incremental hash-based reuse; explain/query now consume graph edges read-only (including optional framework graph refs)."
 
 [[feature]]
 id = "049"

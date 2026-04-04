@@ -111,3 +111,59 @@ A deterministic graph cache enables faster and more accurate dependency-style an
 - explain/query can consume graph edges for dependency/resource answers
 - read-only capabilities never write graph artifact
 - docs describe graph lifecycle and fallback behavior when missing
+
+## Implemented Behavior (Current)
+
+- `forge index` now builds deterministic repo graph cache at `.forge/graph.json`.
+- Graph schema contains:
+  - `graph_version`, `generated_at`, `repo_root`, `source_type`, `source_id`
+  - `nodes`, `edges`, `stats`
+  - incremental internals: `file_hashes`, `by_file` (for deterministic reuse)
+- Implemented edge classes in cache:
+  - `import`
+  - `resource_read`
+  - `resource_write`
+  - `symbol_def`
+  - `call` (best-effort)
+  - `symbol_ref` (best-effort)
+- Incremental refresh is file-hash based:
+  - unchanged files reuse cached node/edge references
+  - changed files are rebuilt deterministically
+- `forge explain` consumes graph edges for dependency/resource facets (with deterministic fallback to direct extraction).
+- `forge query` consumes graph as an additional retrieval channel (`graph_match`) in ranking.
+- Optional framework graph references are supported read-only via `.forge/config.toml`:
+  - `[graph.framework_refs]`
+  - key: `framework_id@version`
+  - value: path to graph JSON artifact
+
+## How To Validate Quickly
+
+Build index + graph:
+
+```bash
+forge index
+```
+
+Inspect graph artifact:
+
+```bash
+cat .forge/graph.json
+```
+
+Graph-backed explain:
+
+```bash
+forge --output-format json explain --focus dependencies --direction out core/llm_integration.py
+```
+
+Graph-informed query:
+
+```bash
+forge --output-format json query "resource_read dependency edge"
+```
+
+## Known Limits / Notes
+
+- Graph detectors are deterministic and pattern-based, not full AST parity across languages.
+- Framework graph refs are read-only and optional; missing refs degrade gracefully with explicit warnings.
+- Cache writes are scoped to index workflow (`forge index`); read-only capabilities consume only.

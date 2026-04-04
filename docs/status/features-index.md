@@ -56,8 +56,8 @@ Status values:
 | 044 | Forge Init Team Templates and Interactive Onboarding | 2026-04-03 | implemented | 2026-04-03 | [044-forge-init-team-templates-and-interactive-onboarding.md](/Users/tino/PhpstormProjects/forge/docs/features/044-forge-init-team-templates-and-interactive-onboarding.md) |
 | 045 | Run History Always JSON Contract | 2026-04-03 | implemented | 2026-04-03 | [045-run-history-always-json-contract.md](/Users/tino/PhpstormProjects/forge/docs/features/045-run-history-always-json-contract.md) |
 | 046 | Query Path And Symbol Signals | 2026-04-03 | implemented | 2026-04-03 | [046-query-path-and-symbol-signals.md](/Users/tino/PhpstormProjects/forge/docs/features/046-query-path-and-symbol-signals.md) |
-| 047 | Explain Facets and Dependency Direction | 2026-04-03 | defined | - | [047-explain-facets-and-dependency-direction.md](/Users/tino/PhpstormProjects/forge/docs/features/047-explain-facets-and-dependency-direction.md) |
-| 048 | Graph JSON Edge Cache under .forge | 2026-04-03 | defined | - | [048-graph-json-edge-cache-under-forge.md](/Users/tino/PhpstormProjects/forge/docs/features/048-graph-json-edge-cache-under-forge.md) |
+| 047 | Explain Facets and Dependency Direction | 2026-04-03 | implemented | 2026-04-04 | [047-explain-facets-and-dependency-direction.md](/Users/tino/PhpstormProjects/forge/docs/features/047-explain-facets-and-dependency-direction.md) |
+| 048 | Graph JSON Edge Cache under .forge | 2026-04-03 | implemented | 2026-04-04 | [048-graph-json-edge-cache-under-forge.md](/Users/tino/PhpstormProjects/forge/docs/features/048-graph-json-edge-cache-under-forge.md) |
 | 049 | Query Orchestration Iterative State Machine | 2026-04-03 | implemented | 2026-04-03 | [049-query-orchestration-iterative-state-machine.md](/Users/tino/PhpstormProjects/forge/docs/features/049-query-orchestration-iterative-state-machine.md) |
 | 050 | Query Action Handler Execution Model | 2026-04-03 | implemented | 2026-04-03 | [050-query-action-handler-execution-model.md](/Users/tino/PhpstormProjects/forge/docs/features/050-query-action-handler-execution-model.md) |
 | 051 | Query Progress Scoring and Stop Criteria | 2026-04-03 | implemented | 2026-04-03 | [051-query-progress-scoring-and-stop-criteria.md](/Users/tino/PhpstormProjects/forge/docs/features/051-query-progress-scoring-and-stop-criteria.md) |
@@ -74,6 +74,8 @@ Status values:
 | 062 | Runtime Settings Foundation: Registry, Resolver, Source Tracing | 2026-04-04 | defined | - | [062-runtime-settings-foundation-registry-resolver.md](/Users/tino/PhpstormProjects/forge/docs/features/062-runtime-settings-foundation-registry-resolver.md) |
 | 063 | Named Session Context with Auto-Create and TTL | 2026-04-04 | defined | - | [063-named-session-context-and-ttl.md](/Users/tino/PhpstormProjects/forge/docs/features/063-named-session-context-and-ttl.md) |
 | 064 | README v2: Value, Trust & Control Positioning | unknown | defined | - | [064-readme-v2-value-trust-and-control.md](/Users/tino/PhpstormProjects/forge/docs/features/064-readme-v2-value-trust-and-control.md) |
+| 065 | User Documentation Delivery on GitHub (DE/EN) | unknown | defined | - | [065-user-documentation-delivery-de-en-on-github.md](/Users/tino/PhpstormProjects/forge/docs/features/065-user-documentation-delivery-de-en-on-github.md) |
+| 066 | Docs MVP on GitHub Pages with MkDocs Material (DE/EN) | unknown | defined | - | [066-docs-mvp-mkdocs-landing-de-en.md](/Users/tino/PhpstormProjects/forge/docs/features/066-docs-mvp-mkdocs-landing-de-en.md) |
 
 ## Notes
 - 001: Core CLI and capability model implemented.
@@ -99,6 +101,8 @@ Status values:
 - 044: Added `forge init` with template selection, interactive/non-interactive flows, preview/overwrite safeguards, and repo-owned .forge file generation.
 - 045: Run history now persists structured output.contract for every non-runs capability execution (text and json modes).
 - 046: Query ranking now includes bounded path/symbol/summary signals plus source_type metadata and repo-first source-aware scoring.
+- 047: Explain now supports directional/source-scoped dependency/resource facets (`--focus`, `--direction`, `--source-scope`) with edge sections (`dependency_edges_out/in`, `resource_edges`) and source typing metadata.
+- 048: Added deterministic `.forge/graph.json` edge cache with incremental hash-based reuse; explain/query now consume graph edges read-only (including optional framework graph refs).
 - 049: Query orchestration now runs as a bounded iterative state machine with per-iteration trace and explicit done reasons.
 - 050: Query orchestration now executes explicit handlers for search/read/explain/rank/summarize/stop with per-iteration handler diagnostics.
 - 051: Query orchestration now computes deterministic per-iteration progress scoring with source-aware penalties and no-progress stop criteria.

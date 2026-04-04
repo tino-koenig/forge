@@ -15,10 +15,12 @@ from core.analysis_primitives import (
 )
 from core.capability_model import CommandRequest, Profile
 from core.effects import ExecutionSession
+from core.framework_profiles import load_framework_registry, select_framework_profile
+from core.graph_cache import load_framework_graph_references, load_repo_graph
 from core.llm_integration import maybe_refine_summary, provenance_section, resolve_settings
 from core.output_contracts import build_contract, emit_contract_json
 from core.output_views import is_compact, is_full, resolve_view
-from core.repo_io import read_text_file
+from core.repo_io import iter_repo_files, read_text_file
 from core.run_reference import RunReferenceError, resolve_from_run_payload
 
 
@@ -71,6 +73,28 @@ class OutputSurface:
     producer: str
     evidence: Evidence
     confidence: str
+
+
+@dataclass
+class SymbolFact:
+    name: str
+    kind: str
+    evidence: Evidence
+    confidence: str
+
+
+@dataclass
+class Edge:
+    source_path: str
+    target_path: str | None
+    target_raw: str | None
+    edge_kind: str
+    evidence: Evidence
+    confidence: str
+    source_type: str
+    target_type: str
+    framework_id: str | None = None
+    framework_version: str | None = None
 
 
 BEHAVIOR_SIGNAL_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
@@ -516,6 +540,376 @@ def extract_output_surfaces(rel_target: Path, content: str) -> list[OutputSurfac
     return items[:20]
 
 
+def extract_symbol_facts(rel_target: Path, content: str) -> list[SymbolFact]:
+    items: list[SymbolFact] = []
+    seen: set[tuple[str, str]] = set()
+    for idx, raw in enumerate(content.splitlines(), start=1):
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        m_class = re.match(r"^class\s+([A-Za-z_][A-Za-z0-9_]*)\b", stripped)
+        if m_class:
+            name = m_class.group(1)
+            marker = ("class", name)
+            if marker not in seen:
+                seen.add(marker)
+                items.append(
+                    SymbolFact(
+                        name=name,
+                        kind="class",
+                        evidence=Evidence(path=rel_target, line=idx, text=stripped),
+                        confidence="high",
+                    )
+                )
+            continue
+        m_def = re.match(r"^def\s+([A-Za-z_][A-Za-z0-9_]*)\b", stripped)
+        if m_def:
+            name = m_def.group(1)
+            marker = ("function", name)
+            if marker not in seen:
+                seen.add(marker)
+                items.append(
+                    SymbolFact(
+                        name=name,
+                        kind="function",
+                        evidence=Evidence(path=rel_target, line=idx, text=stripped),
+                        confidence="high",
+                    )
+                )
+    return items[:24]
+
+
+def _classify_target_type(
+    candidate: Path | None,
+    repo_root: Path,
+    framework_roots: list[Path],
+) -> str:
+    if candidate is not None:
+        try:
+            candidate.relative_to(repo_root)
+            return "repo"
+        except ValueError:
+            pass
+        for root in framework_roots:
+            try:
+                candidate.relative_to(root)
+                return "framework"
+            except ValueError:
+                continue
+    return "external"
+
+
+def _resolve_python_import_target(module: str, rel_target: Path, repo_root: Path) -> Path | None:
+    cleaned = module.strip().strip(".")
+    if not cleaned:
+        return None
+    parts = [part for part in cleaned.split(".") if part]
+    if not parts:
+        return None
+    direct = repo_root.joinpath(*parts).with_suffix(".py")
+    if direct.exists():
+        return direct
+    pkg_init = repo_root.joinpath(*parts) / "__init__.py"
+    if pkg_init.exists():
+        return pkg_init
+    relative = (repo_root / rel_target.parent).joinpath(*parts).with_suffix(".py")
+    if relative.exists():
+        return relative
+    return None
+
+
+def _resolve_literal_target(raw_value: str, rel_target: Path, repo_root: Path) -> Path | None:
+    candidate = Path(raw_value)
+    if candidate.is_absolute():
+        return candidate if candidate.exists() else None
+    local = (repo_root / rel_target.parent / candidate).resolve()
+    try:
+        local.relative_to(repo_root)
+    except ValueError:
+        return None
+    if local.exists():
+        return local
+    repo_candidate = (repo_root / candidate).resolve()
+    try:
+        repo_candidate.relative_to(repo_root)
+    except ValueError:
+        return None
+    return repo_candidate if repo_candidate.exists() else None
+
+
+def _include_by_scope(source_scope: str, target_type: str) -> bool:
+    if source_scope == "repo_only":
+        return target_type == "repo"
+    if source_scope == "framework_only":
+        return target_type == "framework"
+    return target_type in {"repo", "framework", "external"}
+
+
+def extract_dependency_edges_out(
+    *,
+    rel_target: Path,
+    content: str,
+    repo_root: Path,
+    source_scope: str,
+    framework_id: str | None,
+    framework_version: str | None,
+    framework_roots: list[Path],
+) -> list[Edge]:
+    edges: list[Edge] = []
+    seen: set[tuple[str, str, int]] = set()
+    for idx, raw in enumerate(content.splitlines(), start=1):
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        patterns = [
+            (re.match(r"^import\s+([A-Za-z0-9_\.]+)", stripped), "import"),
+            (re.match(r"^from\s+([A-Za-z0-9_\.]+)\s+import\s+", stripped), "import_from"),
+            (re.search(r"(?:require|import)\(\s*['\"]([^'\"]+)['\"]\s*\)", stripped), "require"),
+        ]
+        for match, kind in patterns:
+            if match is None:
+                continue
+            raw_target = match.group(1).strip()
+            resolved = _resolve_python_import_target(raw_target, rel_target, repo_root)
+            if resolved is None:
+                resolved = _resolve_literal_target(raw_target, rel_target, repo_root)
+            target_type = _classify_target_type(resolved, repo_root, framework_roots)
+            if not _include_by_scope(source_scope, target_type):
+                break
+            marker = (kind, raw_target, idx)
+            if marker in seen:
+                break
+            seen.add(marker)
+            target_path = None
+            if resolved is not None:
+                try:
+                    target_path = str(resolved.relative_to(repo_root))
+                except ValueError:
+                    target_path = str(resolved)
+            edges.append(
+                Edge(
+                    source_path=str(rel_target),
+                    target_path=target_path,
+                    target_raw=None if target_path else raw_target,
+                    edge_kind=kind,
+                    evidence=Evidence(path=rel_target, line=idx, text=stripped),
+                    confidence="high" if target_path else "medium",
+                    source_type="repo",
+                    target_type=target_type,
+                    framework_id=framework_id if target_type == "framework" else None,
+                    framework_version=framework_version if target_type == "framework" else None,
+                )
+            )
+            break
+        if len(edges) >= 40:
+            break
+    return edges[:24]
+
+
+def extract_dependency_edges_in(
+    *,
+    rel_target: Path,
+    target: ResolvedTarget,
+    request: CommandRequest,
+    repo_root: Path,
+    session: ExecutionSession,
+    source_scope: str,
+    framework_roots: list[Path],
+) -> list[Edge]:
+    edges: list[Edge] = []
+    seen: set[tuple[str, int, str]] = set()
+    code_ext = {".py", ".js", ".jsx", ".ts", ".tsx", ".php"}
+    rel_target_str = str(rel_target)
+    target_stem = rel_target.stem
+    symbol = request.payload.strip() if target.source == "symbol" else ""
+    probes = [target_stem, rel_target_str]
+    if symbol:
+        probes.append(symbol)
+    for path in iter_repo_files(repo_root, session):
+        rel_path = path.relative_to(repo_root)
+        if rel_path == rel_target:
+            continue
+        if rel_path.suffix.lower() not in code_ext:
+            continue
+        text = read_text_file(path, session)
+        if not text:
+            continue
+        for idx, raw in enumerate(text.splitlines(), start=1):
+            stripped = raw.strip()
+            if not stripped:
+                continue
+            if not any(probe and probe in stripped for probe in probes):
+                continue
+            lowered = stripped.lower()
+            if "import " not in lowered and "from " not in lowered and "require(" not in lowered and "use " not in lowered:
+                continue
+            target_type = _classify_target_type(path, repo_root, framework_roots)
+            if not _include_by_scope(source_scope, target_type):
+                continue
+            marker = (str(rel_path), idx, stripped)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            edges.append(
+                Edge(
+                    source_path=str(rel_path),
+                    target_path=rel_target_str,
+                    target_raw=None,
+                    edge_kind="reference",
+                    evidence=Evidence(path=rel_path, line=idx, text=stripped),
+                    confidence="medium",
+                    source_type="repo",
+                    target_type="repo",
+                )
+            )
+            if len(edges) >= 24:
+                return edges
+    return edges
+
+
+def extract_resource_edges(
+    *,
+    rel_target: Path,
+    content: str,
+    repo_root: Path,
+    source_scope: str,
+    framework_id: str | None,
+    framework_version: str | None,
+    framework_roots: list[Path],
+) -> list[Edge]:
+    edges: list[Edge] = []
+    seen: set[tuple[str, str, int]] = set()
+    literal_re = re.compile(r"['\"]([^'\"]+\.(?:json|jsonl|toml|yaml|yml|txt|md|j2|jinja|prompt|cfg|ini))['\"]")
+    for idx, raw in enumerate(content.splitlines(), start=1):
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        for match in literal_re.finditer(stripped):
+            raw_target = match.group(1)
+            resolved = _resolve_literal_target(raw_target, rel_target, repo_root)
+            target_type = _classify_target_type(resolved, repo_root, framework_roots)
+            if not _include_by_scope(source_scope, target_type):
+                continue
+            if "write" in stripped:
+                kind = "file_write"
+            elif "read" in stripped or "open(" in stripped:
+                kind = "file_read"
+            else:
+                kind = "resource_ref"
+            marker = (kind, raw_target, idx)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            target_path = None
+            if resolved is not None:
+                try:
+                    target_path = str(resolved.relative_to(repo_root))
+                except ValueError:
+                    target_path = str(resolved)
+            edges.append(
+                Edge(
+                    source_path=str(rel_target),
+                    target_path=target_path,
+                    target_raw=None if target_path else raw_target,
+                    edge_kind=kind,
+                    evidence=Evidence(path=rel_target, line=idx, text=stripped),
+                    confidence="high" if target_path else "medium",
+                    source_type="repo",
+                    target_type=target_type,
+                    framework_id=framework_id if target_type == "framework" else None,
+                    framework_version=framework_version if target_type == "framework" else None,
+                )
+            )
+            if len(edges) >= 24:
+                return edges
+    return edges
+
+
+def _graph_node_maps(graph: dict[str, object]) -> tuple[dict[str, dict[str, object]], list[dict[str, object]]]:
+    nodes_raw = graph.get("nodes")
+    edges_raw = graph.get("edges")
+    node_map: dict[str, dict[str, object]] = {}
+    if isinstance(nodes_raw, list):
+        for item in nodes_raw:
+            if isinstance(item, dict) and isinstance(item.get("id"), str):
+                node_map[str(item["id"])] = item
+    edge_list = [item for item in edges_raw if isinstance(item, dict)] if isinstance(edges_raw, list) else []
+    return node_map, edge_list
+
+
+def _path_from_node(node: dict[str, object]) -> str | None:
+    path = node.get("path")
+    if isinstance(path, str) and path.strip():
+        return path
+    return None
+
+
+def extract_edges_from_graph(
+    *,
+    graph: dict[str, object],
+    rel_target: Path,
+    kinds: set[str],
+    direction: str,
+    source_scope: str,
+    framework_ref: str | None = None,
+) -> list[Edge]:
+    node_map, edges = _graph_node_maps(graph)
+    target_file_id = f"file:{rel_target}"
+    out: list[Edge] = []
+    for edge in edges:
+        kind = edge.get("kind")
+        if not isinstance(kind, str) or kind not in kinds:
+            continue
+        source_id = edge.get("source")
+        target_id = edge.get("target")
+        if not isinstance(source_id, str) or not isinstance(target_id, str):
+            continue
+        if direction == "out" and source_id != target_file_id:
+            continue
+        if direction == "in" and target_id != target_file_id:
+            continue
+        src_node = node_map.get(source_id, {})
+        tgt_node = node_map.get(target_id, {})
+        source_type = str(edge.get("source_type") or src_node.get("source_type") or "repo")
+        target_type = str(tgt_node.get("source_type") or "external")
+        if source_scope == "repo_only" and (source_type != "repo" and target_type != "repo"):
+            continue
+        if source_scope == "framework_only" and target_type != "framework":
+            continue
+        source_path = _path_from_node(src_node) or str(rel_target)
+        target_path = _path_from_node(tgt_node)
+        target_raw = None if target_path else (tgt_node.get("package") if isinstance(tgt_node.get("package"), str) else target_id)
+        evidence_payload = edge.get("evidence")
+        line = 0
+        text = f"graph edge: {kind}"
+        if isinstance(evidence_payload, list) and evidence_payload:
+            first = evidence_payload[0]
+            if isinstance(first, dict):
+                line = int(first.get("line", 0)) if str(first.get("line", "0")).isdigit() else 0
+                raw_text = first.get("text")
+                text = str(raw_text) if isinstance(raw_text, str) and raw_text.strip() else text
+        framework_id = None
+        framework_version = None
+        if framework_ref:
+            framework_id = framework_ref.split("@", 1)[0]
+            framework_version = framework_ref.split("@", 1)[1] if "@" in framework_ref else None
+        out.append(
+            Edge(
+                source_path=source_path,
+                target_path=target_path,
+                target_raw=target_raw,
+                edge_kind=kind,
+                evidence=Evidence(path=Path(source_path), line=line, text=text),
+                confidence=str(edge.get("confidence") or "medium"),
+                source_type=source_type,
+                target_type=target_type,
+                framework_id=framework_id,
+                framework_version=framework_version,
+            )
+        )
+    return out[:24]
+
+
 def build_focus_answer(
     *,
     focus: str,
@@ -524,7 +918,36 @@ def build_focus_answer(
     default_values: list[DefaultValueSignal],
     llm_participation: list[LLMParticipation],
     output_surfaces: list[OutputSurface],
+    symbol_facts: list[SymbolFact],
+    dependency_edges_out: list[Edge],
+    dependency_edges_in: list[Edge],
+    resource_edges: list[Edge],
+    direction: str,
+    source_scope: str,
 ) -> str | None:
+    if focus == "symbols":
+        if not symbol_facts:
+            return f"No top-level symbol declarations were detected for {rel_target}."
+        return f"{rel_target} exposes {len(symbol_facts)} detected top-level symbols."
+    if focus == "dependencies":
+        active = dependency_edges_in if direction == "in" else dependency_edges_out
+        if not active:
+            return (
+                f"No {direction}-direction dependency edges were detected for {rel_target} "
+                f"within source scope '{source_scope}'."
+            )
+        return (
+            f"{rel_target} has {len(active)} dependency edges in direction '{direction}' "
+            f"within source scope '{source_scope}'."
+        )
+    if focus == "resources":
+        if not resource_edges:
+            return f"No resource edges were detected for {rel_target} within source scope '{source_scope}'."
+        return f"{rel_target} has {len(resource_edges)} resource edges within source scope '{source_scope}'."
+    if focus == "uses":
+        if not dependency_edges_in:
+            return f"No inbound usage edges were detected for {rel_target} within source scope '{source_scope}'."
+        return f"{rel_target} is referenced by {len(dependency_edges_in)} inbound usage edges."
     if focus == "settings":
         if not settings_influences:
             return f"No clear settings inputs were detected for {rel_target} in the current static read."
@@ -712,6 +1135,12 @@ def print_explanation(
     explain_focus: str,
     llm_participation: list[LLMParticipation],
     output_surfaces: list[OutputSurface],
+    symbol_facts: list[SymbolFact],
+    dependency_edges_out: list[Edge],
+    dependency_edges_in: list[Edge],
+    resource_edges: list[Edge],
+    explain_direction: str,
+    explain_source_scope: str,
 ) -> None:
     def _display_path(path: Path) -> Path:
         try:
@@ -800,6 +1229,48 @@ def print_explanation(
                         )
                 else:
                     print("No output surfaces detected.")
+            if explain_focus == "symbols":
+                print("\n--- Symbols ---")
+                if symbol_facts:
+                    for item in symbol_facts[:24]:
+                        print(
+                            f"- {item.kind} {item.name} confidence={item.confidence} "
+                            f"@ {_display_path(item.evidence.path)}:{item.evidence.line}"
+                        )
+                else:
+                    print("No symbols detected.")
+            if explain_focus in {"dependencies", "uses"}:
+                print("\n--- Dependency Edges Out ---")
+                if dependency_edges_out:
+                    for item in dependency_edges_out[:24]:
+                        target = item.target_path or item.target_raw or "unknown"
+                        print(
+                            f"- {item.source_path} -> {target} [{item.edge_kind}] "
+                            f"type={item.target_type} confidence={item.confidence}"
+                        )
+                else:
+                    print("No outbound dependency edges detected.")
+                print("\n--- Dependency Edges In ---")
+                if dependency_edges_in:
+                    for item in dependency_edges_in[:24]:
+                        target = item.target_path or item.target_raw or "unknown"
+                        print(
+                            f"- {item.source_path} -> {target} [{item.edge_kind}] "
+                            f"type={item.target_type} confidence={item.confidence}"
+                        )
+                else:
+                    print("No inbound dependency edges detected.")
+            if explain_focus == "resources":
+                print("\n--- Resource Edges ---")
+                if resource_edges:
+                    for item in resource_edges[:24]:
+                        target = item.target_path or item.target_raw or "unknown"
+                        print(
+                            f"- {item.source_path} -> {target} [{item.edge_kind}] "
+                            f"type={item.target_type} confidence={item.confidence}"
+                        )
+                else:
+                    print("No resource edges detected.")
 
     print("\n--- Inference ---")
     inference_limit = 1 if is_compact(view) else 2 if view == "standard" else len(inference_points)
@@ -834,6 +1305,8 @@ def print_explanation(
 
     print("\n--- Next Step ---")
     print(next_step)
+    if is_full(view):
+        print(f"(focus={explain_focus}, direction={explain_direction}, source_scope={explain_source_scope})")
 
 
 def run(request: CommandRequest, args, session: ExecutionSession) -> int:
@@ -841,6 +1314,8 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     repo_root = Path(args.repo_root).resolve()
     explain_focus = str(getattr(args, "explain_focus", "overview") or "overview")
     explain_focus_source = str(getattr(args, "explain_focus_source", "default") or "default")
+    explain_direction = str(getattr(args, "direction", "out") or "out")
+    explain_source_scope = str(getattr(args, "source_scope", "repo_only") or "repo_only")
     explain_command = str(getattr(args, "explain_command", "explain") or "explain")
     try:
         resolved_payload, from_run_meta = resolve_from_run_payload(
@@ -946,6 +1421,129 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     ]
     evidence_facts = build_evidence_facts(repo_root, evidence)
     behavior_signals = build_behavior_signals(target, request)
+    repo_graph = load_repo_graph(repo_root, session)
+    framework_graphs, framework_graph_warnings = load_framework_graph_references(repo_root, session)
+    if framework_graph_warnings and is_full(view):
+        uncertainties.extend(framework_graph_warnings[:3])
+    framework_roots: list[Path] = []
+    framework_id: str | None = None
+    framework_version: str | None = None
+    if explain_source_scope in {"framework_only", "all"}:
+        registry = load_framework_registry(repo_root, session)
+        profile, _, warnings = select_framework_profile(registry, None)
+        if profile is not None:
+            framework_roots = [*profile.framework_roots, *profile.framework_docs_roots]
+            framework_id = profile.profile_id
+            framework_version = profile.version
+        elif explain_source_scope == "framework_only":
+            uncertainties.append("source_scope=framework_only but no framework profile/roots are configured")
+        if warnings and is_full(view):
+            uncertainties.extend(warnings[:3])
+
+    symbol_facts = extract_symbol_facts(rel_target, target.content) if explain_focus == "symbols" else []
+    dependency_edges_out: list[Edge] = []
+    dependency_edges_in: list[Edge] = []
+    resource_edges: list[Edge] = []
+    if explain_focus in {"dependencies", "uses", "resources"}:
+        if repo_graph is not None:
+            if explain_focus == "dependencies":
+                dependency_edges_out.extend(
+                    extract_edges_from_graph(
+                        graph=repo_graph,
+                        rel_target=rel_target,
+                        kinds={"import", "call", "symbol_ref"},
+                        direction="out",
+                        source_scope=explain_source_scope,
+                    )
+                )
+            if explain_focus in {"dependencies", "uses"}:
+                dependency_edges_in.extend(
+                    extract_edges_from_graph(
+                        graph=repo_graph,
+                        rel_target=rel_target,
+                        kinds={"import", "call", "symbol_ref"},
+                        direction="in",
+                        source_scope=explain_source_scope,
+                    )
+                )
+            if explain_focus == "resources":
+                resource_edges.extend(
+                    extract_edges_from_graph(
+                        graph=repo_graph,
+                        rel_target=rel_target,
+                        kinds={"resource_read", "resource_write"},
+                        direction="out",
+                        source_scope=explain_source_scope,
+                    )
+                )
+        if explain_source_scope in {"framework_only", "all"} and framework_graphs:
+            for ref_id, graph in framework_graphs.items():
+                if explain_focus == "dependencies":
+                    dependency_edges_out.extend(
+                        extract_edges_from_graph(
+                            graph=graph,
+                            rel_target=rel_target,
+                            kinds={"import", "call", "symbol_ref"},
+                            direction="out",
+                            source_scope=explain_source_scope,
+                            framework_ref=ref_id,
+                        )
+                    )
+                if explain_focus in {"dependencies", "uses"}:
+                    dependency_edges_in.extend(
+                        extract_edges_from_graph(
+                            graph=graph,
+                            rel_target=rel_target,
+                            kinds={"import", "call", "symbol_ref"},
+                            direction="in",
+                            source_scope=explain_source_scope,
+                            framework_ref=ref_id,
+                        )
+                    )
+                if explain_focus == "resources":
+                    resource_edges.extend(
+                        extract_edges_from_graph(
+                            graph=graph,
+                            rel_target=rel_target,
+                            kinds={"resource_read", "resource_write"},
+                            direction="out",
+                            source_scope=explain_source_scope,
+                            framework_ref=ref_id,
+                        )
+                    )
+        # Deterministic fallback when graph data is missing or provides no target edges.
+        if explain_focus == "dependencies" and not dependency_edges_out:
+            dependency_edges_out = extract_dependency_edges_out(
+                rel_target=rel_target,
+                content=target.content,
+                repo_root=repo_root,
+                source_scope=explain_source_scope,
+                framework_id=framework_id,
+                framework_version=framework_version,
+                framework_roots=framework_roots,
+            )
+        if explain_focus in {"dependencies", "uses"} and not dependency_edges_in:
+            dependency_edges_in = extract_dependency_edges_in(
+                rel_target=rel_target,
+                target=target,
+                request=request,
+                repo_root=repo_root,
+                session=session,
+                source_scope=explain_source_scope,
+                framework_roots=framework_roots,
+            )
+        if explain_focus == "resources" and not resource_edges:
+            resource_edges = extract_resource_edges(
+                rel_target=rel_target,
+                content=target.content,
+                repo_root=repo_root,
+                source_scope=explain_source_scope,
+                framework_id=framework_id,
+                framework_version=framework_version,
+                framework_roots=framework_roots,
+            )
+        if explain_source_scope in {"framework_only", "all"} and not framework_graphs and explain_source_scope == "framework_only":
+            uncertainties.append("no framework graph refs configured; graph scope degraded")
     settings_influences = (
         extract_settings_influences(rel_target, target.content) if explain_focus == "settings" else []
     )
@@ -959,6 +1557,12 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         default_values=default_values,
         llm_participation=llm_participation,
         output_surfaces=output_surfaces,
+        symbol_facts=symbol_facts,
+        dependency_edges_out=dependency_edges_out,
+        dependency_edges_in=dependency_edges_in,
+        resource_edges=resource_edges,
+        direction=explain_direction,
+        source_scope=explain_source_scope,
     )
     inference_points = build_inference_points(
         role=role,
@@ -976,6 +1580,12 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             "command": explain_command,
             "focus": explain_focus,
             "focus_source": explain_focus_source,
+            "direction": explain_direction,
+            "source_scope": explain_source_scope,
+        },
+        "graph_usage": {
+            "repo_graph_loaded": repo_graph is not None,
+            "framework_graph_refs_loaded": sorted(framework_graphs.keys()),
         },
         "role_classification": {"role": role, "reason": rationale},
         "related_files": [str(path) for path in related],
@@ -1069,6 +1679,82 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             }
             for item in output_surfaces
         ]
+    if explain_focus == "symbols":
+        sections["direct_answer"] = focus_answer
+        sections["symbols"] = [
+            {
+                "name": item.name,
+                "kind": item.kind,
+                "evidence": {
+                    "path": str(item.evidence.path),
+                    "line": item.evidence.line,
+                    "text": item.evidence.text,
+                },
+                "confidence": item.confidence,
+            }
+            for item in symbol_facts
+        ]
+    if explain_focus in {"dependencies", "uses"}:
+        sections["direct_answer"] = focus_answer
+        sections["dependency_edges_out"] = [
+            {
+                "source_path": item.source_path,
+                "target_path": item.target_path,
+                "target_raw": item.target_raw,
+                "edge_kind": item.edge_kind,
+                "evidence": {
+                    "path": str(item.evidence.path),
+                    "line": item.evidence.line,
+                    "text": item.evidence.text,
+                },
+                "confidence": item.confidence,
+                "source_type": item.source_type,
+                "target_type": item.target_type,
+                "framework_id": item.framework_id,
+                "framework_version": item.framework_version,
+            }
+            for item in dependency_edges_out
+        ]
+        sections["dependency_edges_in"] = [
+            {
+                "source_path": item.source_path,
+                "target_path": item.target_path,
+                "target_raw": item.target_raw,
+                "edge_kind": item.edge_kind,
+                "evidence": {
+                    "path": str(item.evidence.path),
+                    "line": item.evidence.line,
+                    "text": item.evidence.text,
+                },
+                "confidence": item.confidence,
+                "source_type": item.source_type,
+                "target_type": item.target_type,
+                "framework_id": item.framework_id,
+                "framework_version": item.framework_version,
+            }
+            for item in dependency_edges_in
+        ]
+    if explain_focus == "resources":
+        sections["direct_answer"] = focus_answer
+        sections["resource_edges"] = [
+            {
+                "source_path": item.source_path,
+                "target_path": item.target_path,
+                "target_raw": item.target_raw,
+                "edge_kind": item.edge_kind,
+                "evidence": {
+                    "path": str(item.evidence.path),
+                    "line": item.evidence.line,
+                    "text": item.evidence.text,
+                },
+                "confidence": item.confidence,
+                "source_type": item.source_type,
+                "target_type": item.target_type,
+                "framework_id": item.framework_id,
+                "framework_version": item.framework_version,
+            }
+            for item in resource_edges
+        ]
     if role_hypothesis_alternatives:
         sections["role_hypothesis_alternatives"] = role_hypothesis_alternatives
     if from_run_meta:
@@ -1135,12 +1821,20 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         explain_focus=explain_focus,
         llm_participation=llm_participation,
         output_surfaces=output_surfaces,
+        symbol_facts=symbol_facts,
+        dependency_edges_out=dependency_edges_out,
+        dependency_edges_in=dependency_edges_in,
+        resource_edges=resource_edges,
+        explain_direction=explain_direction,
+        explain_source_scope=explain_source_scope,
     )
     if is_full(view):
         print("\n--- Explain ---")
         print(f"Command: {explain_command}")
         print(f"Focus: {explain_focus}")
         print(f"Focus source: {explain_focus_source}")
+        print(f"Direction: {explain_direction}")
+        print(f"Source scope: {explain_source_scope}")
     if from_run_meta:
         print("\n--- From Run ---")
         print(f"Source run id: {from_run_meta['source_run_id']}")

@@ -413,6 +413,18 @@ def build_parser() -> argparse.ArgumentParser:
             help="Resolve explain target from a previous run id",
         )
         p.add_argument(
+            "--direction",
+            choices=("out", "in"),
+            default="out",
+            help="Dependency direction for dependency-like facets.",
+        )
+        p.add_argument(
+            "--source-scope",
+            choices=("repo_only", "framework_only", "all"),
+            default="repo_only",
+            help="Source scope for dependency/resource facet analysis.",
+        )
+        p.add_argument(
             "--confirm-transition",
             action="store_true",
             help="Explicitly confirm mode transition when using --from-run and transition policy requires it",

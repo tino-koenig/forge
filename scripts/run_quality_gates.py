@@ -1852,6 +1852,65 @@ def gate_index_explain_summary_enrichment(repo_root: Path) -> None:
     assert_true(isinstance(index_summaries, list), "index enrichment: query should expose index_explain_summaries list")
 
 
+def gate_graph_cache_and_consumption(repo_root: Path) -> None:
+    run_cmd(
+        ["python3", str(FORGE), "--repo-root", str(repo_root), "index"],
+        cwd=ROOT,
+    )
+    graph_path = repo_root / ".forge" / "graph.json"
+    assert_true(graph_path.exists(), "graph cache: expected .forge/graph.json")
+    graph_payload = parse_json_output(graph_path.read_text(encoding="utf-8"))
+    for field in ("graph_version", "generated_at", "repo_root", "source_type", "source_id", "nodes", "edges", "stats"):
+        assert_true(field in graph_payload, f"graph cache: missing field '{field}'")
+    assert_true(graph_payload.get("source_type") == "repo", "graph cache: expected source_type=repo")
+    assert_true(isinstance(graph_payload.get("nodes"), list), "graph cache: nodes should be list")
+    assert_true(isinstance(graph_payload.get("edges"), list), "graph cache: edges should be list")
+
+    explain_payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "explain",
+                "--focus",
+                "dependencies",
+                "--direction",
+                "out",
+                "src/service.py",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    explain_graph_usage = explain_payload.get("sections", {}).get("graph_usage", {})
+    assert_true(explain_graph_usage.get("repo_graph_loaded") is True, "graph cache: explain should report repo graph loaded")
+    deps_out = explain_payload.get("sections", {}).get("dependency_edges_out", [])
+    assert_true(isinstance(deps_out, list), "graph cache: explain should expose dependency_edges_out list")
+
+    query_payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "query",
+                "resource_read",
+                "dependency",
+                "edge",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    query_graph_usage = query_payload.get("sections", {}).get("graph_usage", {})
+    assert_true(query_graph_usage.get("repo_graph_loaded") is True, "graph cache: query should report repo graph loaded")
+
+
 def gate_explicit_mode_transition_workflows(repo_root: Path) -> None:
     forge_dir = repo_root / ".forge"
     forge_dir.mkdir(parents=True, exist_ok=True)
@@ -2148,6 +2207,7 @@ def run_all_gates() -> None:
         gate_query_action_orchestration(temp_repo)
         gate_adaptive_query_explain_feedback(temp_repo)
         gate_index_explain_summary_enrichment(temp_repo)
+        gate_graph_cache_and_consumption(temp_repo)
         gate_explicit_mode_transition_workflows(temp_repo)
         gate_effect_boundaries(temp_repo)
         gate_fallback_with_and_without_index(temp_repo)

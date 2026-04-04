@@ -10,6 +10,7 @@ from pathlib import Path
 import tomli
 from core.capability_model import CommandRequest, EffectClass
 from core.effects import ExecutionSession
+from core.graph_cache import build_repo_graph, load_repo_graph
 from core.repo_io import write_forge_file
 
 
@@ -401,4 +402,38 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             f"summary_version={enrichment.get('summary_version')} "
             f"errors={enrichment.get('error_count')}"
         )
+    graph_warning: str | None = None
+    try:
+        existing_graph = load_repo_graph(repo_root, session)
+        files_payload = data.get("entries", {}).get("files", [])
+        file_entries = files_payload if isinstance(files_payload, list) else []
+        graph_payload, graph_warnings = build_repo_graph(
+            repo_root=repo_root,
+            file_entries=file_entries,
+            session=session,
+            existing_graph=existing_graph,
+        )
+        graph_target = write_forge_file(
+            root=repo_root,
+            relative_path="graph.json",
+            content=json.dumps(graph_payload, indent=2, sort_keys=True),
+            session=session,
+        )
+        print(
+            "Graph cache: "
+            f"{graph_target} "
+            f"(nodes={graph_payload.get('stats', {}).get('node_count', 0)}, "
+            f"edges={graph_payload.get('stats', {}).get('edge_count', 0)}, "
+            f"reused_files={graph_payload.get('stats', {}).get('reused_files', 0)}, "
+            f"rebuilt_files={graph_payload.get('stats', {}).get('rebuilt_files', 0)})"
+        )
+        if graph_warnings:
+            print(f"Graph warnings: {len(graph_warnings)} (showing first: {graph_warnings[0]})")
+    except Exception as exc:  # pragma: no cover - defensive
+        graph_warning = f"graph build skipped due to error: {exc}"
+        print(f"Graph cache: {graph_warning}")
+    if graph_warning is not None:
+        data.setdefault("graph", {})
+        if isinstance(data["graph"], dict):
+            data["graph"]["warning"] = graph_warning
     return 0
