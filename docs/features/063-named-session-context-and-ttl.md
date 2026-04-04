@@ -132,3 +132,55 @@ Hard guarantees:
 - inactivity TTL (default 60 min) is enforced deterministically
 - source tracing shows session contribution in resolved settings
 - session data is inspectable and can be cleared/ended explicitly
+
+## Implemented Behavior (Current)
+
+- Added repo-local named session storage:
+  - `.forge/sessions/index.json` (active pointer + session registry)
+  - `.forge/sessions/<name>.json` (session payload)
+- Added session lifecycle command group:
+  - `forge session` (active status; auto-create if missing/invalid)
+  - `forge session new <name> [--ttl-minutes <n>]`
+  - `forge session use <name> [--revive]`
+  - `forge session list`
+  - `forge session show [<name>]`
+  - `forge session clear-context [<name>]`
+  - `forge session end [<name>]`
+- Runtime-consuming commands now auto-ensure an active valid session; expired/missing active sessions trigger deterministic auto-create (`auto-YYYYMMDD-HHMMSS`).
+- TTL model:
+  - default inactivity TTL is 60 minutes
+  - `session use <name>` fails on expired sessions unless `--revive` is provided
+- Context retention is bounded and inspectable:
+  - recent capabilities
+  - recent question summaries (bounded length/count)
+  - active framework profile hint
+  - preference snapshot keys
+- Runtime resolver integration:
+  - active session `runtime_settings` are loaded as session-scope values
+  - source tracing exposes named source (`session:<name>`) for those keys
+
+## How To Use
+
+```bash
+forge session
+forge session new work --ttl-minutes 120
+forge session use work
+forge session list
+forge session show work
+forge session clear-context work
+forge session end work
+```
+
+Expired session behavior:
+
+```bash
+forge session use work
+# -> error if expired
+forge session --revive use work
+```
+
+## Known Limits / Notes
+
+- Session-scoped runtime setting mutation via `forge set/get` UX is delivered in feature 061; in this feature, session runtime values are persisted/consumed but not yet managed by dedicated set/get commands.
+- Session storage is repo-local by design for transparency and inspectability.
+- Session context remains bounded and intentionally avoids prompt transcript persistence.

@@ -531,6 +531,184 @@ def gate_runtime_settings_foundation(repo_root: Path) -> None:
         assert_true(query_payload.get("profile") == "detailed", "runtime foundation: execution.profile intensive should map to detailed")
 
 
+def gate_named_session_context_and_ttl(repo_root: Path) -> None:
+    query_payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "query",
+                "compute_price",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    assert_true(query_payload.get("capability") == "query", "session gate: expected query payload")
+
+    sessions_root = repo_root / ".forge" / "sessions"
+    index_path = sessions_root / "index.json"
+    assert_true(index_path.exists(), "session gate: expected .forge/sessions/index.json")
+    index_payload = parse_json_output(index_path.read_text(encoding="utf-8"))
+    active_name = index_payload.get("active_session")
+    assert_true(isinstance(active_name, str) and active_name.startswith("auto-"), "session gate: expected auto-created active session")
+    active_path = sessions_root / f"{active_name}.json"
+    assert_true(active_path.exists(), "session gate: expected auto-created session file")
+    active_payload = parse_json_output(active_path.read_text(encoding="utf-8"))
+    for field in ("name", "created_at", "last_activity_at", "expires_at", "ttl_minutes", "runtime_settings", "context", "meta"):
+        assert_true(field in active_payload, f"session gate: missing session field '{field}'")
+
+    list_payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "session",
+                "list",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    sessions = list_payload.get("sections", {}).get("sessions", [])
+    assert_true(isinstance(sessions, list) and sessions, "session gate: expected non-empty session list")
+
+    # Expire active session and verify runtime command auto-creates a fresh one.
+    active_payload["last_activity_at"] = "2000-01-01T00:00:00+00:00"
+    active_payload["expires_at"] = "2000-01-01T00:10:00+00:00"
+    active_path.write_text(json.dumps(active_payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    run_cmd(
+        ["python3", str(FORGE), "--repo-root", str(repo_root), "query", "compute_price"],
+        cwd=ROOT,
+    )
+    refreshed_index = parse_json_output(index_path.read_text(encoding="utf-8"))
+    refreshed_active = refreshed_index.get("active_session")
+    assert_true(
+        isinstance(refreshed_active, str) and refreshed_active != active_name and refreshed_active.startswith("auto-"),
+        "session gate: expected new auto session after expiry",
+    )
+
+    run_cmd(
+        [
+            "python3",
+            str(FORGE),
+            "--output-format",
+            "json",
+            "--repo-root",
+            str(repo_root),
+            "session",
+            "--ttl-minutes",
+            "5",
+            "new",
+            "work",
+        ],
+        cwd=ROOT,
+    )
+    use_payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "session",
+                "use",
+                "work",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    assert_true(use_payload.get("sections", {}).get("session", {}).get("name") == "work", "session gate: expected use work")
+
+    work_path = sessions_root / "work.json"
+    work_payload = parse_json_output(work_path.read_text(encoding="utf-8"))
+    work_payload["last_activity_at"] = "2000-01-01T00:00:00+00:00"
+    work_payload["expires_at"] = "2000-01-01T00:10:00+00:00"
+    work_path.write_text(json.dumps(work_payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    expired_use = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "session",
+                "use",
+                "work",
+            ],
+            cwd=ROOT,
+            expect_ok=False,
+        ).stdout
+    )
+    assert_true("expired" in " ".join(expired_use.get("uncertainty", [])), "session gate: expected expiry error on use")
+
+    revived = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "session",
+                "--revive",
+                "use",
+                "work",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    assert_true(revived.get("sections", {}).get("revived") is True, "session gate: expected revive=true")
+
+    run_cmd(
+        [
+            "python3",
+            str(FORGE),
+            "--output-format",
+            "json",
+            "--repo-root",
+            str(repo_root),
+            "session",
+            "clear-context",
+            "work",
+        ],
+        cwd=ROOT,
+    )
+    cleared = parse_json_output(work_path.read_text(encoding="utf-8"))
+    context = cleared.get("context", {})
+    assert_true(isinstance(context, dict), "session gate: context should remain object")
+    assert_true(context.get("recent_capabilities") == [], "session gate: clear-context should empty recent_capabilities")
+
+    run_cmd(
+        [
+            "python3",
+            str(FORGE),
+            "--output-format",
+            "json",
+            "--repo-root",
+            str(repo_root),
+            "session",
+            "end",
+            "work",
+        ],
+        cwd=ROOT,
+    )
+    assert_true(not work_path.exists(), "session gate: expected work session file removed on end")
+
+
 def gate_env_file_autoload(repo_root: Path) -> None:
     forge_dir = repo_root / ".forge"
     forge_dir.mkdir(parents=True, exist_ok=True)
@@ -2328,6 +2506,7 @@ def run_all_gates() -> None:
         gate_config_toml_fallback(temp_repo)
         gate_config_precedence(temp_repo)
         gate_runtime_settings_foundation(temp_repo)
+        gate_named_session_context_and_ttl(temp_repo)
         gate_env_file_autoload(temp_repo)
         gate_prompt_profile_policy(temp_repo)
         gate_prompt_template_resolution_failure(temp_repo_promptfail)

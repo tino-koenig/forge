@@ -18,6 +18,7 @@ class Capability(str, Enum):
     DOCTOR = "doctor"
     RUNS = "runs"
     LOGS = "logs"
+    SESSION = "session"
 
 
 class Profile(str, Enum):
@@ -62,6 +63,9 @@ CAPABILITY_POLICIES: dict[Capability, CapabilityPolicy] = {
     Capability.DOCTOR: CapabilityPolicy(allowed_effects=frozenset({EffectClass.READ_ONLY})),
     Capability.RUNS: CapabilityPolicy(allowed_effects=frozenset({EffectClass.READ_ONLY})),
     Capability.LOGS: CapabilityPolicy(allowed_effects=frozenset({EffectClass.READ_ONLY})),
+    Capability.SESSION: CapabilityPolicy(
+        allowed_effects=frozenset({EffectClass.READ_ONLY, EffectClass.FORGE_WRITE})
+    ),
     Capability.INDEX: CapabilityPolicy(
         allowed_effects=frozenset({EffectClass.READ_ONLY, EffectClass.FORGE_WRITE})
     ),

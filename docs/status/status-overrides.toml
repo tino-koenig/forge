@@ -371,6 +371,13 @@ defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Added runtime settings foundation with canonical registry, deterministic resolver (cli/session/repo/user/toml/default precedence), source tracing, and bootstrap/config wiring."
 
+[[feature]]
+id = "063"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Added named repo-local session store with TTL, auto-create on runtime-consuming commands, session command group, revive flow, bounded context retention, and resolver source integration (`session:<name>`)."
+
 # Issue examples:
 # [[issue]]
 # id = "12"

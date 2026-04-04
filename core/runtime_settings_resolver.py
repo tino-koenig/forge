@@ -16,6 +16,7 @@ from core.runtime_settings_registry import (
     list_runtime_specs,
     runtime_spec_for,
 )
+from core.session_store import get_active_session
 
 
 @dataclass(frozen=True)
@@ -111,6 +112,15 @@ def _session_scope_payload(args) -> dict[str, object] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def _named_session_scope(repo_root: Path) -> tuple[dict[str, object], str | None, list[str]]:
+    active, warnings = get_active_session(repo_root)
+    if active is None:
+        return {}, None, warnings
+    source = f"session:{active.name}"
+    values = dict(active.runtime_settings) if isinstance(active.runtime_settings, dict) else {}
+    return values, source, warnings
+
+
 def _baseline_from_repo_config(repo_root: Path) -> dict[str, object]:
     """Subset bridge from existing repo config into runtime canonical keys."""
     config_path = repo_root / ".forge" / "config.toml"
@@ -155,6 +165,8 @@ def resolve_runtime_settings(
     repo_payload = _load_toml(repo_runtime_path)
     user_payload = _load_toml(user_runtime_path)
     baseline_toml = _baseline_from_repo_config(repo_root)
+    named_session_values, named_session_source, session_load_warnings = _named_session_scope(repo_root)
+    warnings.extend(session_load_warnings)
 
     session_values, session_norm, session_warnings = _read_scope_assignments("session", session_payload)
     repo_values, repo_norm, repo_warnings = _read_scope_assignments("repo", repo_payload)
@@ -166,6 +178,10 @@ def resolve_runtime_settings(
     warnings.extend(repo_warnings)
     warnings.extend(user_warnings)
 
+    if named_session_values:
+        for key, value in named_session_values.items():
+            session_values.setdefault(key, value)
+
     values: dict[str, object] = {}
     sources: dict[str, str] = {}
     for spec in list_runtime_specs():
@@ -176,7 +192,10 @@ def resolve_runtime_settings(
             continue
         if key in session_values:
             values[key] = session_values[key]
-            sources[key] = "session"
+            if key in named_session_values and named_session_source:
+                sources[key] = named_session_source
+            else:
+                sources[key] = "session"
             continue
         if key in repo_values:
             values[key] = repo_values[key]

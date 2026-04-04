@@ -13,6 +13,11 @@ from core.capability_model import build_request
 from core.capability_model import CommandRequest, Profile
 from core.env_loader import load_env_file
 from core.output_contracts import consume_last_contract, reset_last_contract
+from core.session_store import (
+    ensure_active_session,
+    get_active_session,
+    record_activity,
+)
 from core.runtime_settings_resolver import resolve_runtime_settings
 from core.run_history import append_run
 from core.runtime import execute
@@ -25,6 +30,7 @@ REQUIRES_PAYLOAD = {
     "doctor": False,
     "runs": False,
     "logs": False,
+    "session": False,
     "query": True,
     "explain": True,
     "review": True,
@@ -264,7 +270,7 @@ def build_parser() -> argparse.ArgumentParser:
     logs_parser.add_argument(
         "--capability",
         dest="logs_capability",
-        choices=("init", "index", "ask", "query", "explain", "review", "describe", "test", "doctor", "runs", "logs"),
+        choices=("init", "index", "ask", "query", "explain", "review", "describe", "test", "doctor", "runs", "logs", "session"),
         help="Filter by capability name",
     )
     logs_parser.add_argument(
@@ -509,6 +515,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Target; optional profile prefix: simple|standard|detailed (or use --from-run)",
     )
 
+    session_parser = subparsers.add_parser("session", help="Manage named Forge runtime sessions")
+    session_parser.add_argument(
+        "--ttl-minutes",
+        dest="session_ttl_minutes",
+        type=int,
+        default=60,
+        help="TTL for newly created sessions (minutes, default: 60)",
+    )
+    session_parser.add_argument(
+        "--revive",
+        dest="session_revive",
+        action="store_true",
+        help="Revive expired session when using `session use`.",
+    )
+    session_parser.add_argument(
+        "parts",
+        nargs="*",
+        help="Commands: new <name> | use <name> | list | show [name] | clear-context [name] | end [name]",
+    )
+
     return parser
 
 
@@ -584,6 +610,20 @@ def main(argv: list[str] | None = None) -> int:
         args.explain_focus = None
         args.explain_focus_source = None
         args.explain_command = None
+
+    runtime_consuming_capabilities = {
+        "ask",
+        "query",
+        "explain",
+        "review",
+        "describe",
+        "test",
+        "doctor",
+    }
+    args.active_session_name = None
+    if capability_name in runtime_consuming_capabilities:
+        active_session, _auto_created, _session_warnings = ensure_active_session(repo_root)
+        args.active_session_name = active_session.name
 
     explicit_cli_values: dict[str, object] = {}
     output_format_explicit = _flag_present(argv_effective, "--output-format")
@@ -700,6 +740,20 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         sys.stdout = original_stdout
     execution_duration_ms = int((time.perf_counter() - execution_started) * 1000)
+    if exit_code == 0 and capability_name in runtime_consuming_capabilities:
+        try:
+            active, _warnings = get_active_session(repo_root)
+            if active is not None:
+                framework_hint = getattr(args, "framework_profile", None)
+                record_activity(
+                    repo_root,
+                    capability=request.capability.value,
+                    payload=request.payload,
+                    framework_profile_hint=str(framework_hint) if isinstance(framework_hint, str) and framework_hint.strip() else None,
+                )
+        except Exception:
+            # Activity retention must not break primary capability execution.
+            pass
     protocol_events.append(
         build_step_event(
             run_id=0,
