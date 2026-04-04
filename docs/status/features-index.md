@@ -73,7 +73,7 @@ Status values:
 | 061 | Runtime Settings via `forge set/get` | 2026-04-04 | implemented | 2026-04-04 | [061-runtime-settings-set-get.md](/Users/tino/PhpstormProjects/forge/docs/features/061-runtime-settings-set-get.md) |
 | 062 | Runtime Settings Foundation: Registry, Resolver, Source Tracing | 2026-04-04 | implemented | 2026-04-04 | [062-runtime-settings-foundation-registry-resolver.md](/Users/tino/PhpstormProjects/forge/docs/features/062-runtime-settings-foundation-registry-resolver.md) |
 | 063 | Named Session Context with Auto-Create and TTL | 2026-04-04 | implemented | 2026-04-04 | [063-named-session-context-and-ttl.md](/Users/tino/PhpstormProjects/forge/docs/features/063-named-session-context-and-ttl.md) |
-| 064 | README v2: Value, Trust & Control Positioning | 2026-04-04 | defined | - | [064-readme-v2-value-trust-and-control.md](/Users/tino/PhpstormProjects/forge/docs/features/064-readme-v2-value-trust-and-control.md) |
+| 064 | README v2: Value, Trust & Control Positioning | 2026-04-04 | implemented | 2026-04-04 | [064-readme-v2-value-trust-and-control.md](/Users/tino/PhpstormProjects/forge/docs/features/064-readme-v2-value-trust-and-control.md) |
 | 065 | User Documentation Delivery on GitHub (DE/EN) | 2026-04-04 | defined | - | [065-user-documentation-delivery-de-en-on-github.md](/Users/tino/PhpstormProjects/forge/docs/features/065-user-documentation-delivery-de-en-on-github.md) |
 | 066 | Docs MVP on GitHub Pages with MkDocs Material (DE/EN) | 2026-04-04 | defined | - | [066-docs-mvp-mkdocs-landing-de-en.md](/Users/tino/PhpstormProjects/forge/docs/features/066-docs-mvp-mkdocs-landing-de-en.md) |
 | 067 | Index-Aware Retrieval Scope Contract | 2026-04-04 | implemented | 2026-04-04 | [067-index-aware-retrieval-scope-contract.md](/Users/tino/PhpstormProjects/forge/docs/features/067-index-aware-retrieval-scope-contract.md) |
@@ -171,6 +171,7 @@ Status values:
 - 061: Added top-level `forge set/get` commands with alias normalization, canonical runtime key support, session/repo/user scope reads+writes, and resolved source tracing (`--source`, including `session:<name>`).
 - 062: Added runtime settings foundation with canonical registry, deterministic resolver (cli/session/repo/user/toml/default precedence), source tracing, and bootstrap/config wiring.
 - 063: Added named repo-local session store with TTL, auto-create on runtime-consuming commands, session command group, revive flow, bounded context retention, and resolver source integration (`session:<name>`).
+- 064: README v2 now presents outcome-first onboarding, trust/safety policy matrix, explicit control surfaces, and LLM deployment positioning.
 - 067: Query now enforces index participation state in default content retrieval and exposes the effective retrieval scope in structured output.
 - 068: Query now runs deterministic symbol-first resolution for definition/location intents with explicit symbol-stage evidence and output metadata.
 - 069: Index artifacts now persist graph build failure warnings in index.json to keep persisted graph-status metadata auditable.

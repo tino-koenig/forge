@@ -127,3 +127,31 @@ Provide a short real output excerpt (contract-oriented) showing:
 - resource-access and change-scope boundaries are explicitly documented
 - LLM strategy (own infra + OpenAI-compatible) is explicit and actionable
 - README length/structure improves first-time comprehension and onboarding speed
+
+## Implemented Behavior (Current)
+
+- `README.md` was redesigned around outcome-first onboarding and explicit control surfaces.
+- Public positioning now uses:
+  - `Forge - AI Repo Workbench`
+  - `Explicit AI for real repository work.`
+  - repository slug reference `forge-ai-repo-workbench`
+- README now includes a prominent Trust & Safety policy matrix (`Capability`, `Reads`, `Writes`, `Notes`) plus explicit mode-boundary and auditability sections.
+- LLM deployment guidance now explicitly covers self-hosted OpenAI-compatible endpoints and deterministic provider-off fallback behavior.
+
+## How To Validate Quickly
+
+1. Open `README.md` and verify section order:
+   - Hero/value
+   - 60-second quickstart
+   - Core use-cases
+   - Trust & Safety
+   - Control surfaces
+   - LLM deployment model
+   - Quick proof excerpt
+   - command overview + roadmap/contribution links
+2. Verify Trust & Safety matrix includes both read-side scope and write-side boundaries.
+3. Verify LLM section includes both self-hosted OpenAI-compatible configuration and provider-off fallback command.
+
+## Known Limits / Notes
+
+- README stays intentionally concise; deep internals and exhaustive configuration details remain in dedicated docs/spec files.

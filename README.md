@@ -1,166 +1,103 @@
-# Forge
+# Forge — AI Repo Workbench
 
-**Forge is a transparent, composable AI-assisted repo tool for understanding, reviewing, testing, documenting, and improving code.**
+**Explicit AI for real repository work.**
 
-Forge is built for developers who want useful AI support without opaque automation.
+Repository slug: `forge-ai-repo-workbench`
 
-It focuses on explicit modes and clear building blocks instead of hidden agent behavior:
-- query a repository
-- review code and structures
-- draft tests
-- describe a codebase
-- run diagnostics (`doctor`)
-- inspect and replay run history (`runs`)
-- support targeted fixes and implementations
+Forge helps you inspect, explain, review, and improve repositories with **auditable outputs**, **explicit boundaries**, and **human-readable evidence**.
 
-Forge is designed to be useful in small, focused tasks first. More advanced workflows are built from the same visible, understandable foundations.
+It is built for people who want AI help on real codebases without giving up control.
 
-**With control, not magic.**
+---
 
-## Why Forge?
+## Why Forge
 
-Most AI coding tools fall into one of two categories:
-- lightweight assistants for snippets and chat
-- opaque agents that do a lot, but hide too much
+Most AI coding tools feel magical right up to the point where you need to trust, verify, or reproduce what happened.
 
-Forge takes a different approach.
+Forge takes a different approach:
 
-It treats repository work as a set of explicit, composable tasks:
-- find and explain
-- inspect and review
-- draft and verify
-- fix and implement
+- **explicit instead of opaque** — capabilities, boundaries, and outputs are visible
+- **read-only by default** — repository analysis comes before code mutation
+- **evidence-first** — answers point to files, paths, symbols, graph edges, or config surfaces
+- **auditable by design** — runs, protocol events, fallbacks, and warnings are inspectable
+- **local-first LLM friendly** — works well with self-hosted OpenAI-compatible setups
 
-The goal is not maximum automation at any cost.  
-The goal is useful, transparent assistance for real repository work.
+Forge is not just for “find symbol X”. It is for the kind of questions developers actually ask when entering or debugging a real project.
 
-## Principles
+---
 
-- **Explicit over implicit**  
-  Forge prefers clear modes and visible steps over hidden automation.
+## What Forge Helps You Do
 
-- **Composable, not magical**  
-  Complex workflows should be built from understandable pieces.
+### Understand an unfamiliar codebase
 
-- **AI where it helps**  
-  AI is used for interpretation, summarization, prioritization, and proposal generation — not to hide core logic.
-
-- **Human-auditable by default**  
-  Outputs should be inspectable and grounded in files, paths, commands, and findings.
-
-- **Local-first, repo-first**  
-  Forge should work directly against a real repository and remain useful without platform lock-in.
-
-- **Configuration sharpens, it does not define**  
-  Configuration should refine behavior, not become the product.
-
-## Core modes
-
-### `forge query`
-Answer targeted questions about a repository.
-
-Examples:
-- Where are addresses imported?
-- Show all occurrences of inline styles.
-- Which files are involved in sending emails?
-- Where is field `foo` written?
-
-### `forge review`
-Review code, files, or structures using explicit heuristics and project-aware rules.
-
-Examples:
-- Does this controller contain business logic?
-- Are controller actions properly guarded?
-- Are there direct queries in the wrong layer?
-
-### `forge test`
-Draft or generate tests from real code context.
-
-Examples:
-- Write tests for class `PriceCalculator`.
-- Cover the edge case where the amount is negative.
-- Show missing test cases for parser `X`.
-
-### `forge describe`
-Summarize a repository, module, or subsystem for orientation and documentation.
-
-Examples:
-- Summarize this repository for a README.
-- Describe the architecture.
-- Explain the import flow.
-
-### `forge doctor`
-Alias: `forge config validate`
-Validate local Forge setup and provider/config readiness.
-
-Examples:
-- Validate config and environment wiring.
-- Check if local prompt templates are readable.
-- Probe OpenAI-compatible endpoint reachability when requested.
-
-### `forge runs`
-Inspect previous Forge executions and replay them by ID.
-Run history records are persisted as JSONL with a structured `output.contract` for every capability run.
-
-Examples:
-- `forge runs list`
-- `forge runs last --output-format json`
-- `forge runs 12 show full`
-- `forge runs 12 rerun`
-- `forge runs prune --dry-run`
-- `forge runs --keep-last 200 prune`
-- `forge runs --older-than-days 30 prune`
-
-Cross-capability reuse from history:
-- `forge explain --from-run 12`
-- `forge review --from-run 12`
-- `forge test --from-run 12`
-- `forge describe --from-run 12`
-- `forge review --from-run 12 --confirm-transition` (when transition policy requires explicit confirmation)
-
-### Later modes
-- `forge fix`
-- `forge implement`
-- `forge issue`
-
-These build on the same foundations rather than introducing a separate black-box agent.
-
-## Example commands
+Ask for architecture, behavior, config, dependencies, or entry points:
 
 ```bash
-forge query "Where are addresses imported?"
-forge review src/Controller/UserController.php
-forge test src/Service/PriceCalculator.php --case "negative amount"
+forge query "Where is the OpenAI-compatible provider configured?"
+forge query "Which files decide whether web access is allowed?"
+forge query "Where does Forge store protocol logs and run history?"
 forge describe
-forge doctor --check-llm-endpoint
-forge config validate --check-llm-endpoint
-forge runs 12 show full
-forge --view compact query "find main entry point"
-forge --details review src/service.py
 ```
 
-## Development Setup
+### Explain behavior, not just locations
 
-Recommended local development flow:
+Use `explain` when you want structured answers about settings, dependencies, resources, outputs, or LLM participation:
+
+```bash
+forge explain:settings modes/ask.py
+forge explain:dependencies modes/query.py
+forge explain:outputs modes/review.py
+forge explain:llm core/llm_foundation.py
+```
+
+### Review code with reproducible findings
+
+Run deterministic review heuristics with visible evidence and bounded scope:
+
+```bash
+forge review modes/query.py
+forge review core/config.py
+```
+
+### Inspect trust, provenance, and execution traces
+
+Audit what happened, how Forge decided, and where LLMs or web access were involved:
+
+```bash
+forge runs list
+forge logs tail
+forge logs stats
+forge logs show --run-id 42
+```
+
+### Draft tests from real context
+
+```bash
+forge test modes/settings.py --case "session-scoped override precedence"
+```
+
+---
+
+## 60-Second Quickstart
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e .
+forge init --non-interactive --template balanced
 forge doctor
+forge query "Where is the runtime settings precedence resolved?"
 ```
 
-Primary dev invocation:
-- `forge <mode> ...`
+That gives you:
 
-Compatibility invocation:
-- `python -m forge <mode> ...`
-- `python forge.py <mode> ...` (legacy compatibility path)
+- a local Forge setup in the repository
+- an initialized `.forge/` workspace
+- baseline diagnostics
+- a first useful repository question instead of a low-value symbol lookup
 
-## Workstation Installation (pipx)
-
-Recommended user/workstation installation outside a development checkout:
+### Workstation install (global `forge`)
 
 ```bash
 python3 -m pip install --user pipx
@@ -169,201 +106,307 @@ pipx install forge-repo-tool
 forge --help
 ```
 
-Update path:
+`forge-repo-tool` is the published Python package name that provides the `forge` CLI.
+
+---
+
+## Good Example Questions
+
+These are closer to real repository work than “where is symbol X defined?”
+
+### Query examples
 
 ```bash
-pipx upgrade forge-repo-tool
+forge query "Where is the framework profile selected and loaded?"
+forge query "Which config keys control LLM behavior?"
+forge query "How does Forge decide whether a capability is read-only?"
+forge query "Where are session TTL and runtime scope files handled?"
+forge query "Which files control graph validation and graph warnings?"
 ```
 
-Uninstall path:
+### Explain examples
 
 ```bash
-pipx uninstall forge-repo-tool
+forge explain:settings core/runtime_settings_resolver.py
+forge explain:defaults modes/init.py
+forge explain:dependencies modes/explain.py
+forge explain:resources core/protocol_log.py
+forge explain:llm core/llm_integration.py
 ```
 
-Notes:
-- `pipx` is the default workstation distribution target.
-- Binary/native packaging is currently out of scope.
-- Repository behavior remains repo-driven via `.forge` in the target repository.
-
-## Human-First Output Views
-
-Text output supports explicit view modes:
-- `--view compact`
-- `--view standard` (default)
-- `--view full`
-
-Use `--details` as shorthand for full diagnostic output in text mode.
-JSON output (`--output-format json`) remains full machine-readable contract data.
-
-
-## Design goals
-
-Forge should be:
-
-- useful without heavy configuration
-- predictable in behavior
-- modular in implementation
-- understandable in output
-- adaptable through simple profiles and overrides
-
-Forge should not be:
-
-- a prompt box with hidden behavior
-- a configuration-first framework
-- a fully autonomous coding black box
-
-## Configuration
-
-Forge supports optional profiles, rules, and local overrides.
-
-These are meant to sharpen repository understanding, review behavior, and templates — not to replace sensible defaults.
-
-Examples:
-- prefer certain source paths
-- add framework-specific review rules
-- define test conventions
-- point to a local reference repository
-
-## Status
-
-Forge is in early development.
-
-The first public focus is:
-- query
-- review
-- describe
-- test drafting
-
-Fix and implementation workflows come next, built on the same transparent foundations.
-
-## Quality Gates
-
-Forge includes a repeatable capability quality-gate suite using fixture repositories.
-
-Run locally:
+### Review examples
 
 ```bash
-python3 scripts/run_quality_gates.py
+forge review modes/ask.py
+forge review core/session_store.py
+forge review scripts/run_quality_gates.py
 ```
 
-The suite checks:
-- behavior smoke coverage across index/doctor/query/explain/review/describe/test
-- output contract JSON shape for query/explain/review
-- LLM-assisted path coverage (mock provider) with provenance metadata
-- evidence quality expectations
-- read-only effect boundaries for analysis capabilities
-- fallback behavior with and without `.forge/index.json`
-
-## LLM Integration
-
-Forge supports controlled, optional LLM-assisted refinement for:
-- query
-- explain
-- review
-- describe
-- test
-
-Defaults remain conservative:
-- simple profile: LLM policy off
-- standard profile: optional
-- detailed profile: optional/preferred by capability
-
-Use explicit CLI controls:
+### Ask-mode examples
 
 ```bash
-forge --llm-mode auto --llm-provider openai_compatible --llm-base-url http://localhost:4000/v1 --llm-model gpt-4o-mini query standard "where is compute_price"
-forge --llm-mode auto --llm-output-language de query "In welchen Dateien wird ein LLM eingesetzt?"
-forge --llm-mode off review detailed src/controller.py
-forge --query-input-mode exact query "grep-like exact terms without interpretation"
+forge ask:repo "How does Forge balance deterministic retrieval with LLM assistance?"
+forge ask:docs "What does the framework integration layer support?"
+forge ask:latest "What changed most recently in the logging pipeline?"
 ```
 
-Repo-local configuration is loaded from `.forge/config.toml`:
+---
+
+## Core Capabilities
+
+- `query` — locate implementation, configuration, entry points, and relevant evidence
+- `explain` — inspect one target through facets such as dependencies, settings, defaults, outputs, resources, and LLM usage
+- `review` — run deterministic review heuristics with evidence
+- `describe` — orient yourself in a repository or module quickly
+- `test` — draft test plans and cases from real code context
+- `ask`, `ask:repo`, `ask:docs`, `ask:latest` — ask broader questions with explicit source boundaries
+- `runs`, `logs` — inspect execution history, protocol traces, and analytics
+- `doctor` — validate setup, config, and runtime readiness
+- `init` — bootstrap Forge in a repo with team-oriented templates and onboarding
+
+---
+
+## Team Templates and Repository Onboarding
+
+Forge is designed to start from a real repository, not a blank AI chat.
+
+`forge init` supports **team templates** and guided onboarding so teams can standardize how Forge behaves inside a repo:
+
+- choose a baseline template for the repository
+- generate repo-owned `.forge/*` configuration artifacts
+- define source scope and framework-policy defaults during onboarding
+- keep configuration inside the repository instead of hiding it in per-user magic
+
+This makes Forge useful for individual repos, but also practical for teams that want consistent AI behavior across projects.
+
+---
+
+## Framework Integration, Better Said
+
+Forge does more than simple file search.
+
+It can use **framework-aware source profiles** and optional framework references to retrieve better evidence from framework-specific code and docs. In practice, that means Forge can work with:
+
+- local framework profile definitions
+- optional framework docs/reference paths
+- framework-aware retrieval and graph references
+- source-aware provenance in output contracts
+
+So instead of saying “framework integration” as a vague feature, the stronger wording is:
+
+**Forge can become framework-aware through explicit profiles, local reference sources, and graph-backed retrieval.**
+
+That keeps the capability powerful without making it sound magical.
+
+---
+
+## Local LLMs First
+
+Forge is designed for your own LLM deployment first, while staying OpenAI-compatible.
+
+It works well with:
+
+- self-hosted OpenAI-compatible endpoints
+- local or on-prem model serving
+- provider APIs that expose an OpenAI-compatible interface
+- deterministic fallback when LLM support is disabled or unavailable
+
+Tested and developed with a strong focus on:
+
+- `Devstral-Small-2-24B-Instruct-2512`
+- `Mistral-Small-3.2-24B-Instruct-2506`
+- `Qwen3-30B-A3B`
+- `Codestral-22B-v0.1`
+
+Example:
 
 ```toml
 [llm]
 provider = "openai_compatible"
-
-[llm.openai_compatible]
-base_url = "http://localhost:4000/v1"
-model = "gpt-4o-mini"
-api_key_env = "FORGE_LLM_API_KEY"
-timeout_s = 30
-
-[llm.request]
-context_budget_tokens = 12000
-max_output_tokens = 700
-temperature = 0.2
-
-[llm.prompt]
-system_template = "prompts/system/default_read_only.txt"
-profile = "strict_read_only"
-output_language = "auto" # auto | de | en | de-DE | ...
-
-[llm.query_planner]
-enabled = true
-mode = "optional" # off | optional | preferred
-max_terms = 12
-max_code_variants = 8
-max_latency_ms = 2500
-
-[llm.query_orchestrator]
-enabled = true
-mode = "optional" # off | optional | preferred
-max_iterations = 2
-max_files = 8
-max_tokens = 1200
-max_wall_time_ms = 2500
-
-[llm.observability]
-enabled = false
-level = "minimal" # minimal | standard | debug
-retention_count = 1000
-max_file_mb = 20
-
-[index.enrichment]
-enabled = true
-summary_version = 1
-max_summary_chars = 220
-
-[transitions]
-require_confirmation = false
-
-[transitions.gates]
-review_to_test_min_severity = "low" # none | low | medium | high
-test_to_fix_require_failure = true
+base_url = "http://localhost:8080/v1"
+model = "local/devstral-small-24b"
 ```
 
-Precedence:
+Deterministic fallback example:
+
+```bash
+forge --llm-mode off query "Where is the cache built?"
+```
+
+Forge still remains useful when the LLM is unavailable. That is a design goal, not an accident.
+
+---
+
+## Auditability and Logging
+
+Auditability is one of Forge’s core product properties.
+
+Forge does not just return a result — it gives you a way to inspect how that result was produced.
+
+That includes:
+
+- structured output contracts
+- run history with inspectable records
+- protocol event logs for execution traces
+- explicit warnings and fallback states
+- log filtering, analytics, and run-focused inspection
+- redaction/privacy guards for sensitive log content
+
+Useful commands:
+
+```bash
+forge runs list
+forge runs show 42
+forge logs tail
+forge logs stats
+forge logs show --run-id 42
+```
+
+This means Forge is not only explainable at the answer level, but also **traceable at the execution level**.
+
+---
+
+## Trust & Safety Model
+
+Forge treats trust as a product feature: **explicit capabilities, explicit read scopes, explicit side effects**.
+
+| Capability | Reads | Writes | Notes |
+|---|---|---|---|
+| `query`, `explain`, `review`, `describe`, `test` | repo files, `.forge/index.json`, `.forge/graph.json`, optional framework refs/docs | none | read-only analysis modes |
+| `ask`, `ask:repo`, `ask:docs`, `ask:latest` | question + optional web/doc retrieval (policy-controlled) | none | web access only when enabled by policy/settings |
+| `doctor`, `config validate`, `get`, `runs`, `logs` | local config, run/log artifacts | none | diagnostics and inspection only |
+| `index` | repository files + existing index/graph artifacts | `.forge/index.json`, `.forge/graph.json` | repository metadata build, no source edits |
+| `session`, `set` | runtime/session config context | `.forge/sessions/*`, runtime scope files | settings and session state only |
+| `init` | target path state, templates | `.forge/*` bootstrap artifacts | repository setup only |
+| future `fix`, `implement` | planned explicit target scope | planned explicit bounded writes | not current default behavior |
+
+### Mode boundary
+
+- Current analysis workflows are read-only for repository source code.
+- Current write-capable operations are limited to Forge-owned artifacts, config, and session state.
+- Future code-writing modes are planned with explicit target narrowing and policy controls.
+
+---
+
+## Control Surfaces
+
+You control Forge through:
+
 - CLI flags
-- environment variables
-- `.forge/config.toml`
-- internal defaults
+- repo config: `.forge/config.toml`
+- local overrides: `.forge/config.local.toml`
+- runtime/session settings: `forge set/get`, `forge session ...`
 
-Secrets:
-- store API keys in environment variables (for example loaded via `.env`)
-- do not store raw secrets in `.forge/config.toml`
-- Forge auto-loads `<repo-root>/.env` when present (without overriding already-set environment variables)
-- optional override: `--env-file /path/to/.env`
+Deterministic precedence is applied and can be traced through diagnostics and output metadata.
 
-Notes:
-- deterministic evidence collection always runs first
-- query planner is optional and bounded; deterministic retrieval remains authoritative
-- LLM use never expands effect boundaries
-- if LLM is unavailable, Forge falls back explicitly to deterministic behavior
-- optional redacted diagnostics log can be enabled at `.forge/logs/llm_observability.jsonl`
+---
 
-## Vision
+## Contract-Oriented Output
 
-Forge aims to become a reliable workbench for AI-assisted repository work:
+Example:
 
-- understand codebases
-- review and inspect structures
-- draft tests and documentation
-- support targeted changes
-- eventually help resolve issues in a controlled, inspectable way
+```bash
+forge --output-format json query "Which files decide whether web access is allowed?"
+```
 
-The long-term goal is not an opaque autonomous agent.  
-It is a reliable, understandable workbench for AI-assisted repository work.
+Example shape:
+
+```json
+{
+  "summary": "Most likely relevant files include modes/ask.py and runtime settings/config resolution paths.",
+  "evidence": [
+    {
+      "path": "modes/ask.py",
+      "line": 1,
+      "text": "..."
+    }
+  ],
+  "sections": {
+    "llm_usage": {
+      "used": true,
+      "fallback_reason": null
+    },
+    "action_orchestration": {
+      "done_reason": "sufficient_evidence"
+    }
+  },
+  "uncertainty": [
+    "Results are based on indexed retrieval and bounded heuristic ranking."
+  ]
+}
+```
+
+The point is not the exact JSON shape. The point is that the output is **inspectable**, **structured**, and **not pretending to be magic**.
+
+---
+
+## Command Overview
+
+```bash
+forge query "Where is the OpenAI-compatible provider configured?"
+forge explain:dependencies modes/query.py
+forge explain:settings core/runtime_settings_resolver.py
+forge review core/config.py
+forge describe
+forge test modes/settings.py --case "session-scoped override precedence"
+forge doctor
+forge logs stats
+forge runs list
+```
+
+Run full quality gates:
+
+```bash
+PYTHONPATH=. python3 scripts/run_quality_gates.py
+```
+
+Run focused quality gates:
+
+```bash
+PYTHONPATH=. python3 scripts/run_quality_gates.py --only gate_runtime_settings_set_get
+```
+
+---
+
+## Current Project State
+
+Forge already includes implemented support for:
+
+- team-template-based initialization
+- framework-aware profiles and local framework reference sources
+- reusable LLM foundations
+- runtime settings with deterministic precedence and source tracing
+- named sessions with TTL
+- structured run history
+- protocol event logging, analytics, and redaction
+- central bounded orchestration foundations
+- rich `query`, `explain`, `review`, `describe`, and `ask` behavior
+
+The current repository state reflects a broad implemented feature base, including logging, protocol analytics, framework-aware retrieval, team-template onboarding, and explicit control/audit surfaces. fileciteturn1file0 fileciteturn1file2
+
+---
+
+## Roadmap and Contribution
+
+- Product direction and principles: [AGENTS.md](AGENTS.md)
+- Project roadmap: [docs/roadmap.md](docs/roadmap.md)
+- Feature status index: [docs/status/features-index.md](docs/status/features-index.md)
+- Issue status index: [docs/status/issues-index.md](docs/status/issues-index.md)
+- Feature specs: [docs/features](docs/features)
+- Issues and spec corrections: [docs/issues](docs/issues)
+
+If you contribute changes, run quality gates and keep feature/issue docs plus status in sync.
+
+---
+
+## Short Positioning
+
+Forge is for developers and teams who want AI help with real repositories — but still want to know:
+
+- what was read
+- what was inferred
+- what was logged
+- what the model did
+- where the answer came from
 
 **With control, not magic.**
