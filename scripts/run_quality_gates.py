@@ -661,6 +661,27 @@ def gate_runtime_settings_set_get(repo_root: Path) -> None:
         llm_model_source.startswith("session:"),
         "set/get: llm.model source should be session:<name>",
     )
+    doctor_after_session = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "doctor",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    runtime_after_session = doctor_after_session.get("sections", {}).get("runtime_settings", {})
+    scope_paths = runtime_after_session.get("scope_paths", {}) if isinstance(runtime_after_session, dict) else {}
+    session_scope_path = str(scope_paths.get("session", ""))
+    assert_true(
+        session_scope_path.startswith("session:"),
+        "set/get: runtime scope_paths.session should reflect named session origin",
+    )
 
     with tempfile.TemporaryDirectory() as td:
         user_runtime = Path(td) / "runtime.toml"

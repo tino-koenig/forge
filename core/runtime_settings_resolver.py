@@ -168,7 +168,7 @@ def resolve_runtime_settings(
     repo_runtime_path = repo_root / ".forge" / "runtime.toml"
     user_runtime_path = default_user_runtime_path()
     scope_paths = {
-        "session": "env:FORGE_RUNTIME_SESSION_JSON",
+        "session": "none",
         "repo": str(repo_runtime_path),
         "user": str(user_runtime_path),
         "toml": str(repo_root / ".forge" / "config.toml"),
@@ -180,6 +180,12 @@ def resolve_runtime_settings(
     baseline_toml = _baseline_from_repo_config(repo_root)
     named_session_values, named_session_source, session_load_warnings = _named_session_scope(repo_root)
     warnings.extend(session_load_warnings)
+    if named_session_source and session_payload:
+        scope_paths["session"] = f"merged:{named_session_source}+env:FORGE_RUNTIME_SESSION_JSON"
+    elif named_session_source:
+        scope_paths["session"] = named_session_source
+    elif session_payload:
+        scope_paths["session"] = "env:FORGE_RUNTIME_SESSION_JSON"
 
     session_values, session_norm, session_warnings = _read_scope_assignments("session", session_payload)
     repo_values, repo_norm, repo_warnings = _read_scope_assignments("repo", repo_payload)
