@@ -372,7 +372,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Question; optional profile prefix: simple|standard|detailed",
     )
 
-    ask_parser = subparsers.add_parser("ask", help="User-friendly ask entrypoint (maps to query)")
+    ask_parser = subparsers.add_parser("ask", help="User-friendly ask entrypoint (dedicated ask capability)")
     ask_parser.add_argument(
         "--framework-profile",
         help="Optional framework profile id/alias from .forge/frameworks.toml",

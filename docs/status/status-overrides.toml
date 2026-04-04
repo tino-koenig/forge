@@ -476,6 +476,13 @@ defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Provenance helper is now source-aware; ask emits correct web/none evidence-source categories."
 
+[[feature]]
+id = "076"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Removed stale ask compatibility logic from query mode, aligned ask CLI wording with dedicated routing, and added boundary regression gate coverage."
+
 # Issue examples:
 # [[issue]]
 # id = "12"
@@ -553,6 +560,13 @@ status = "implemented"
 defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Ask provenance now reports source-aware web/none evidence-source values instead of hardcoded repository_artifacts."
+
+[[issue]]
+id = "17"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Completed ask/query boundary cleanup with explicit routing and stale-query-ask-section regression coverage."
 
 [[issue]]
 id = "6"

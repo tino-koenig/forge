@@ -2230,6 +2230,62 @@ def gate_ask_source_aware_provenance(repo_root: Path) -> None:
     )
 
 
+def gate_ask_query_boundary_cleanup(repo_root: Path) -> None:
+    query_payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--llm-provider",
+                "mock",
+                "--repo-root",
+                str(repo_root),
+                "query",
+                "where",
+                "is",
+                "compute_price",
+                "defined",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    query_sections = query_payload.get("sections", {})
+    assert_true(query_payload.get("capability") == "query", "ask/query boundary: query command must resolve to query")
+    assert_true(isinstance(query_sections, dict), "ask/query boundary: expected query sections")
+    assert_true(
+        "ask" not in query_sections,
+        "ask/query boundary: query output must not expose stale ask preset sections",
+    )
+
+    ask_payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--llm-provider",
+                "mock",
+                "--repo-root",
+                str(repo_root),
+                "ask:docs",
+                "typo3",
+                "routing",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    ask_sections = ask_payload.get("sections", {})
+    ask_meta = ask_sections.get("ask", {}) if isinstance(ask_sections, dict) else {}
+    assert_true(ask_payload.get("capability") == "ask", "ask/query boundary: ask alias must resolve to ask")
+    assert_true(
+        isinstance(ask_meta, dict) and ask_meta.get("command") == "ask:docs",
+        "ask/query boundary: ask metadata must keep explicit alias command",
+    )
+
+
 def gate_query_planner_success(repo_root: Path) -> None:
     payload = parse_json_output(
         run_cmd(
@@ -4241,6 +4297,7 @@ def run_all_gates() -> None:
         gate_ask_web_access_policy(temp_repo)
         gate_ask_latest_freshness_policy(temp_repo)
         gate_ask_source_aware_provenance(temp_repo)
+        gate_ask_query_boundary_cleanup(temp_repo)
         gate_query_planner_success(temp_repo)
         gate_query_planner_fallback(temp_repo)
         gate_llm_observability_redaction(temp_repo)

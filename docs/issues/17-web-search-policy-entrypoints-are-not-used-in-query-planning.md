@@ -24,3 +24,21 @@ This weakens targeted docs discovery and diverges from feature intent.
 ## Linked Features
 
 - [072-ask-web-access-policy-and-settings-integration.md](/Users/tino/PhpstormProjects/forge/docs/features/072-ask-web-access-policy-and-settings-integration.md)
+
+## Implemented Behavior (Current)
+
+- Ask/query boundary cleanup is now enforced so query mode no longer applies ask-side compatibility filtering.
+- Command routing is explicitly guarded by regression checks:
+  - `query` remains `capability=query`.
+  - `ask:*` aliases remain `capability=ask`.
+
+## How To Validate Quickly
+
+- Run:
+  - `python3 scripts/run_quality_gates.py`
+- Verify:
+  - `gate_ask_query_boundary_cleanup` passes.
+
+## Known Limits / Notes
+
+- Entrypoint-aware web query planning is implemented in web-search foundation behavior; this issue record is currently tracked as resolved in the same ask/query stabilization batch.

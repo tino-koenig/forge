@@ -1569,47 +1569,6 @@ def format_summary(question: str, candidates: list[Candidate]) -> str:
     return f"Most likely relevant files: {top_paths}."
 
 
-def _is_docs_like_candidate(candidate: Candidate) -> bool:
-    rel = str(candidate.path).lower()
-    if candidate.source_type in {"framework", "web_docs", "web_general"}:
-        return True
-    return rel.startswith("docs/") or rel.endswith(".md") or "/documentation/" in rel
-
-
-def apply_ask_preset(
-    candidates: list[Candidate],
-    preset: str | None,
-) -> tuple[list[Candidate], list[str], str]:
-    if not preset or preset == "auto":
-        return candidates, [], "auto"
-
-    warnings: list[str] = []
-    if preset == "repo":
-        filtered = [item for item in candidates if item.source_type == "repo"]
-        if not filtered:
-            warnings.append("ask:repo found no repo-only hits; falling back to mixed sources")
-            return candidates, warnings, "repo_fallback"
-        return filtered, warnings, "repo"
-
-    if preset == "docs":
-        filtered = [item for item in candidates if _is_docs_like_candidate(item)]
-        if not filtered:
-            warnings.append("ask:docs found no docs/framework hits; falling back to mixed sources")
-            return candidates, warnings, "docs_fallback"
-        return filtered, warnings, "docs"
-
-    if preset == "latest":
-        warnings.append("ask:latest web retrieval is not implemented yet; using docs-focused fallback")
-        filtered = [item for item in candidates if _is_docs_like_candidate(item)]
-        if not filtered:
-            warnings.append("ask:latest fallback found no docs/framework hits; falling back to mixed sources")
-            return candidates, warnings, "latest_fallback_mixed"
-        return filtered, warnings, "latest_fallback_docs"
-
-    warnings.append(f"unknown ask preset '{preset}'; using default query ranking")
-    return candidates, warnings, "unknown_fallback"
-
-
 def human_summary(summary: str, view: str) -> str:
     if is_full(view):
         return summary
@@ -1737,10 +1696,6 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
 
     repo_root = Path(args.repo_root).resolve()
     question = normalize_question(request.payload)
-    ask_mode = bool(getattr(args, "ask_mode", False))
-    ask_command = str(getattr(args, "ask_command", "") or "")
-    ask_preset_requested = str(getattr(args, "ask_preset", "") or "") or None
-    ask_guided = bool(getattr(args, "ask_guided", False))
     policy_violations: list[dict[str, object]] = []
     if has_write_request_intent(question):
         violation = evaluate_action_eligibility(
@@ -1869,9 +1824,6 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     )
     explain_feedback = build_explain_feedback(question=question, candidates=candidates[:12])
     candidates = rerank_with_explain_feedback(candidates, explain_feedback)
-    ask_warnings: list[str] = []
-    ask_preset_effective = "auto"
-    candidates, ask_warnings, ask_preset_effective = apply_ask_preset(candidates, ask_preset_requested)
     explain_feedback = build_explain_feedback(question=question, candidates=candidates[:12])
     candidates = rerank_with_explain_feedback(candidates, explain_feedback)
     feedback_by_path = {str(item.path): item for item in explain_feedback}
@@ -2139,12 +2091,6 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                 )
                 explain_feedback = build_explain_feedback(question=question, candidates=candidates[:12])
                 candidates = rerank_with_explain_feedback(candidates, explain_feedback)
-                candidates, extra_ask_warnings, ask_preset_effective = apply_ask_preset(
-                    candidates,
-                    ask_preset_requested,
-                )
-                if extra_ask_warnings:
-                    ask_warnings.extend(extra_ask_warnings)
                 explain_feedback = build_explain_feedback(question=question, candidates=candidates[:12])
                 candidates = rerank_with_explain_feedback(candidates, explain_feedback)
                 action_applied = True
@@ -2416,19 +2362,6 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         uncertainty.append("Query action orchestration decision was rejected; deterministic fallback was used.")
     if orchestration_done_reason == "no_progress":
         uncertainty.append("Query action orchestration stopped after repeated no-progress iterations.")
-    if ask_guided:
-        ask_warnings.append("--guided is not implemented yet in this rollout; running deterministic ask preset flow")
-    deduped_ask_warnings: list[str] = []
-    seen_ask_warnings: set[str] = set()
-    for warning in ask_warnings:
-        norm = warning.strip()
-        if not norm or norm in seen_ask_warnings:
-            continue
-        seen_ask_warnings.add(norm)
-        deduped_ask_warnings.append(norm)
-    ask_warnings = deduped_ask_warnings
-    for warning in ask_warnings:
-        uncertainty.append(f"Ask preset warning: {warning}")
     for warning in framework_warnings:
         uncertainty.append(f"Framework profile warning: {warning}")
     next_step = (
@@ -2580,14 +2513,6 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         "graph_usage": {
             "repo_graph_loaded": repo_graph is not None,
             "framework_graph_refs_loaded": sorted(framework_graphs.keys()),
-        },
-        "ask": {
-            "enabled": ask_mode,
-            "command": ask_command if ask_mode else None,
-            "preset_requested": ask_preset_requested,
-            "preset_effective": ask_preset_effective,
-            "guided_requested": ask_guided,
-            "warnings": ask_warnings,
         },
         "cross_lingual": {
             "source_language": cross_lingual.source_language,
@@ -2820,15 +2745,6 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             print(f"Anchor terms: {', '.join(symbol_first_terms[:8])}")
         print(f"Exact hits: {symbol_first_counts.get('exact', 0)}")
         print(f"Prefix hits: {symbol_first_counts.get('prefix', 0)}")
-
-        if ask_mode:
-            print("\n--- Ask Preset ---")
-            print(f"Command: {ask_command or 'ask'}")
-            print(f"Preset requested: {ask_preset_requested or 'auto'}")
-            print(f"Preset effective: {ask_preset_effective}")
-            print(f"Guided requested: {ask_guided}")
-            for warning in ask_warnings[:8]:
-                print(f"Warning: {warning}")
 
         print("\n--- Framework Profile ---")
         print(f"Config present: {framework_registry.exists}")
