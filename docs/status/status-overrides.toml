@@ -172,7 +172,9 @@ notes = "Added read-only logs viewer commands (tail/run/show) over protocol JSON
 
 [[feature]]
 id = "033"
-status = "defined"
+status = "implemented"
+implemented_on = "2026-04-04"
+notes = "Added logs filtering and stats analytics (counts, p50/p95, slowest steps, fallback rate, provider/model usage) from persisted protocol events."
 
 [[feature]]
 id = "034"

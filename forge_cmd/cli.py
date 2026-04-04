@@ -249,9 +249,51 @@ def build_parser() -> argparse.ArgumentParser:
 
     logs_parser = subparsers.add_parser("logs", help="Inspect protocol events timeline")
     logs_parser.add_argument(
+        "--run-id",
+        dest="logs_run_id",
+        type=int,
+        help="Filter events by run id",
+    )
+    logs_parser.add_argument(
+        "--capability",
+        dest="logs_capability",
+        choices=("init", "index", "ask", "query", "explain", "review", "describe", "test", "doctor", "runs", "logs"),
+        help="Filter by capability name",
+    )
+    logs_parser.add_argument(
+        "--step-type",
+        dest="logs_step_type",
+        choices=("deterministic", "llm", "io", "policy"),
+        help="Filter by protocol step type",
+    )
+    logs_parser.add_argument(
+        "--status",
+        dest="logs_status",
+        choices=("started", "completed", "failed", "fallback"),
+        help="Filter by step status",
+    )
+    logs_parser.add_argument(
+        "--since",
+        help="Filter events at/after ISO-8601 timestamp",
+    )
+    logs_parser.add_argument(
+        "--until",
+        help="Filter events at/before ISO-8601 timestamp",
+    )
+    logs_parser.add_argument(
+        "--provider",
+        dest="logs_provider",
+        help="Filter by LLM provider metadata",
+    )
+    logs_parser.add_argument(
+        "--model",
+        dest="logs_model",
+        help="Filter by LLM model metadata",
+    )
+    logs_parser.add_argument(
         "parts",
         nargs="*",
-        help="Examples: tail [count] | run <run_id> | show <event_id>",
+        help="Examples: tail [count] | run <run_id> | show <event_id> | stats",
     )
 
     query_parser = subparsers.add_parser("query", help="Run query capability")

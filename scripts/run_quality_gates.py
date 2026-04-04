@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -1364,6 +1364,136 @@ def gate_logs_viewer_and_run_focused_inspection(repo_root: Path) -> None:
     )
 
 
+def gate_log_filtering_and_llm_query_analytics(repo_root: Path) -> None:
+    run_cmd(
+        [
+            "python3",
+            str(FORGE),
+            "--llm-provider",
+            "mock",
+            "--repo-root",
+            str(repo_root),
+            "query",
+            "compute_price",
+        ],
+        cwd=ROOT,
+    )
+
+    stats_payload = parse_json_output(
+        run_cmd(
+            ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "logs", "stats"],
+            cwd=ROOT,
+        ).stdout
+    )
+    stats = stats_payload.get("sections", {}).get("stats", {})
+    assert_true(isinstance(stats, dict), "logs stats: expected stats object")
+    assert_true("counts_by_step_type" in stats, "logs stats: expected counts_by_step_type")
+    assert_true("counts_by_status" in stats, "logs stats: expected counts_by_status")
+    assert_true("duration_ms" in stats, "logs stats: expected duration_ms section")
+    assert_true("slowest_steps" in stats, "logs stats: expected slowest_steps")
+    assert_true("fallback_rate" in stats, "logs stats: expected fallback_rate")
+    assert_true("provider_model_usage" in stats, "logs stats: expected provider_model_usage")
+
+    llm_stats = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "logs",
+                "--step-type",
+                "llm",
+                "stats",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    llm_event_count = llm_stats.get("sections", {}).get("stats", {}).get("event_count", 0)
+    assert_true(int(llm_event_count) > 0, "logs stats llm filter: expected llm events")
+    provider_model_usage = llm_stats.get("sections", {}).get("stats", {}).get("provider_model_usage", {})
+    assert_true(isinstance(provider_model_usage, dict) and bool(provider_model_usage), "logs stats: expected provider/model usage data")
+    provider_model_key = next(iter(provider_model_usage.keys()))
+    provider_name, model_name = provider_model_key.split(":", 1)
+
+    provider_tail = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "logs",
+                "--provider",
+                provider_name,
+                "--model",
+                model_name,
+                "tail",
+                "5",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    provider_events = provider_tail.get("sections", {}).get("events", [])
+    assert_true(isinstance(provider_events, list), "logs provider/model filter: expected events list")
+    assert_true(bool(provider_events), "logs provider/model filter: expected non-empty events")
+
+    now = datetime.now(timezone.utc)
+    since = (now - timedelta(minutes=5)).isoformat()
+    until = (now + timedelta(minutes=5)).isoformat()
+    time_filtered = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "logs",
+                "--since",
+                since,
+                "--until",
+                until,
+                "tail",
+                "20",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    time_events = time_filtered.get("sections", {}).get("events", [])
+    assert_true(isinstance(time_events, list), "logs time filter: expected events list")
+    assert_true(bool(time_events), "logs time filter: expected events in current window")
+
+    invalid_since = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "logs",
+                "--since",
+                "invalid-time",
+                "tail",
+                "5",
+            ],
+            cwd=ROOT,
+            expect_ok=False,
+        ).stdout
+    )
+    assert_true(
+        invalid_since.get("sections", {}).get("status") == "fail",
+        "logs invalid since: expected fail status",
+    )
+
+
 def gate_evidence_quality(repo_root: Path) -> None:
     query_payload = parse_json_output(
         run_cmd(
@@ -1988,6 +2118,7 @@ def run_all_gates() -> None:
         gate_run_history_contract_always_persisted(temp_repo)
         gate_protocol_log_storage_jsonl(temp_repo)
         gate_logs_viewer_and_run_focused_inspection(temp_repo)
+        gate_log_filtering_and_llm_query_analytics(temp_repo)
 
 
 def main() -> int:
