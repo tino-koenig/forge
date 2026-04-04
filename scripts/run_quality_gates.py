@@ -3015,6 +3015,42 @@ def gate_describe_explicit_unresolved_target_contract(repo_root: Path) -> None:
     )
 
 
+def gate_describe_symbol_anchor_evidence(repo_root: Path) -> None:
+    payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "describe",
+                "compute_price",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    sections = payload.get("sections", {})
+    target = sections.get("target", {})
+    assert_true(
+        isinstance(target, dict) and target.get("kind") == "symbol",
+        "describe symbol anchor: expected symbol target resolution for compute_price",
+    )
+    evidence = payload.get("evidence", [])
+    assert_true(isinstance(evidence, list) and evidence, "describe symbol anchor: expected non-empty evidence")
+    anchor_present = any(
+        isinstance(item, dict) and "def compute_price(" in str(item.get("text", ""))
+        for item in evidence
+    )
+    assert_true(anchor_present, "describe symbol anchor: expected def compute_price anchor line in evidence")
+    uncertainty = payload.get("uncertainty", [])
+    assert_true(
+        not any("anchor was not found" in str(item).lower() for item in uncertainty),
+        "describe symbol anchor: strong symbol match should not emit missing-anchor uncertainty",
+    )
+
+
 def gate_external_review_rules(repo_root: Path) -> None:
     forge_dir = repo_root / ".forge"
     forge_dir.mkdir(parents=True, exist_ok=True)
@@ -5316,6 +5352,7 @@ def run_all_gates() -> None:
         gate_frontend_fixture(temp_repo_frontend)
         gate_mixed_fixture_describe(temp_repo_mixed)
         gate_describe_explicit_unresolved_target_contract(temp_repo)
+        gate_describe_symbol_anchor_evidence(temp_repo)
         gate_doctor_config_validate_matrix_malformed(temp_repo_malformed)
         gate_doctor_config_validate_unknown_keys(temp_repo_unknown_cfg)
         gate_doctor_config_validate_provider_required_fields(temp_repo_provider_required)

@@ -411,8 +411,10 @@ def collect_describe_evidence(
     target: ResolvedTarget,
     repo_root: Path,
     files: list[Path],
-) -> list[dict[str, object]]:
+    requested_symbol: str | None = None,
+) -> tuple[list[dict[str, object]], bool]:
     evidence: list[dict[str, object]] = []
+    symbol_anchor_found = False
     if target.kind in {"repo", "directory"}:
         label = "visible repository file" if target.kind == "repo" else "file within described directory"
         for path in files[:10]:
@@ -423,7 +425,30 @@ def collect_describe_evidence(
                     "text": label,
                 }
             )
-        return evidence
+        return evidence, symbol_anchor_found
+
+    if target.kind == "symbol":
+        raw_symbol = (requested_symbol or "").strip()
+        symbol_patterns: list[re.Pattern[str]] = []
+        if raw_symbol:
+            symbol_patterns.append(re.compile(rf"^\s*def\s+{re.escape(raw_symbol)}\s*\("))
+            symbol_patterns.append(re.compile(rf"^\s*class\s+{re.escape(raw_symbol)}\s*[\(:]"))
+        symbol_patterns.append(re.compile(r"^\s*(?:def|class)\s+[A-Za-z_][A-Za-z0-9_]*\s*[\(:]"))
+
+        for idx, line in enumerate(target.content.splitlines(), start=1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if any(pattern.search(line) for pattern in symbol_patterns):
+                evidence.append(
+                    {
+                        "path": str(target.path.relative_to(repo_root)),
+                        "line": idx,
+                        "text": stripped,
+                    }
+                )
+                symbol_anchor_found = True
+                break
 
     for idx, line in enumerate(target.content.splitlines(), start=1):
         stripped = line.strip()
@@ -438,7 +463,7 @@ def collect_describe_evidence(
         )
         if len(evidence) >= 8:
             break
-    return evidence
+    return evidence, symbol_anchor_found
 
 
 def run(request: CommandRequest, args, session: ExecutionSession) -> int:
@@ -527,13 +552,19 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     llm_settings = resolve_settings(args, repo_root)
     llm_outcome = None
     evidence_payload: list[dict[str, object]] = []
+    symbol_anchor_found = False
     sections: dict[str, object] = {}
     if target.kind == "repo":
         files = files_from_index_payload(repo_root, index)
         if not files:
             files = iter_repo_files(repo_root, session)
         deterministic_summary = infer_repo_summary(repo_root, files, detect_languages(files), session)
-        evidence_payload = collect_describe_evidence(target=target, repo_root=repo_root, files=files)
+        evidence_payload, symbol_anchor_found = collect_describe_evidence(
+            target=target,
+            repo_root=repo_root,
+            files=files,
+            requested_symbol=request.payload if target.kind == "symbol" else None,
+        )
         llm_outcome = maybe_refine_summary(
             capability=request.capability,
             profile=request.profile,
@@ -557,7 +588,12 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     else:
         files = list_directory_files(target.path, repo_root, session) if target.kind == "directory" else [target.path]
         deterministic_summary = infer_target_summary(target, repo_root, session)
-        evidence_payload = collect_describe_evidence(target=target, repo_root=repo_root, files=files)
+        evidence_payload, symbol_anchor_found = collect_describe_evidence(
+            target=target,
+            repo_root=repo_root,
+            files=files,
+            requested_symbol=request.payload if target.kind == "symbol" else None,
+        )
         llm_outcome = maybe_refine_summary(
             capability=request.capability,
             profile=request.profile,
@@ -574,6 +610,8 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     uncertainty: list[str] = []
     if target.kind == "symbol":
         uncertainty.append("Symbol targets are resolved via best-effort matching.")
+        if not symbol_anchor_found:
+            uncertainty.append("Requested symbol anchor was not found in evidence; confidence is reduced.")
     elif target.kind == "repo" and index is None and request.profile in {Profile.STANDARD, Profile.DETAILED}:
         uncertainty.append("Index not available; summary is based on direct repository scan.")
     else:

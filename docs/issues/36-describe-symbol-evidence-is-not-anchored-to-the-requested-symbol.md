@@ -26,3 +26,21 @@ For symbol targets, describe evidence is taken from the beginning of the resolve
 ## Linked Features
 
 - [Feature 093 - Describe Symbol-Anchor Evidence Contract](/Users/tino/PhpstormProjects/forge/docs/features/093-describe-symbol-anchor-evidence-contract.md)
+
+## Implemented Behavior (Current)
+
+- Describe now includes deterministic symbol-anchor evidence for symbol targets by prioritizing matching definition/signature lines.
+- Symbol-target outputs now keep evidence grounded in requested-symbol anchors instead of only leading file header lines.
+- Missing symbol anchor now adds explicit uncertainty note to reduce overconfidence.
+- Regression coverage added via `gate_describe_symbol_anchor_evidence`.
+
+## How To Validate Quickly
+
+- Run:
+  - `python3 scripts/run_quality_gates.py`
+- Verify:
+  - `gate_describe_symbol_anchor_evidence` passes.
+
+## Known Limits / Notes
+
+- Symbol anchor detection is pattern-based and relies on readable source content in the resolved file.

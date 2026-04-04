@@ -19,3 +19,22 @@ Ensure describe symbol outputs are anchored to the requested symbol evidence, no
 - Symbol-target evidence includes symbol definition/signature anchor by default.
 - Weak matches are explicitly labeled as low confidence.
 - Regression tests validate evidence anchoring and uncertainty behavior.
+
+## Implemented Behavior (Current)
+
+- Describe evidence extraction now supports symbol-anchor semantics.
+- For symbol targets, evidence attempts to include a definition/signature anchor line for the requested symbol before generic file lines.
+- If no requested-symbol anchor is found, describe emits explicit uncertainty note:
+  - `Requested symbol anchor was not found in evidence; confidence is reduced.`
+- Added regression gate `gate_describe_symbol_anchor_evidence`.
+
+## How To Validate Quickly
+
+- Run:
+  - `python3 scripts/run_quality_gates.py`
+- Verify:
+  - `gate_describe_symbol_anchor_evidence` passes.
+
+## Known Limits / Notes
+
+- Anchor extraction remains deterministic and syntax-pattern based; it does not execute semantic symbol resolution beyond matched file content.

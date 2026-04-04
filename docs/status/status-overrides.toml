@@ -574,6 +574,13 @@ defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Describe now returns an explicit unresolved-target contract for unresolved explicit payloads while preserving implicit repo overview behavior."
 
+[[feature]]
+id = "093"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Describe symbol targets now include deterministic symbol-anchor evidence with explicit uncertainty when requested-symbol anchor is missing."
+
 # Issue examples:
 # [[issue]]
 # id = "12"
@@ -756,6 +763,13 @@ status = "implemented"
 defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Describe no longer falls back to repo summary for unresolved explicit targets and now emits deterministic unresolved-target metadata."
+
+[[issue]]
+id = "36"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Describe symbol evidence is now anchored to requested symbol signatures, with explicit uncertainty note when anchor is missing."
 
 [[issue]]
 id = "6"

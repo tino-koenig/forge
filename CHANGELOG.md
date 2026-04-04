@@ -39,6 +39,7 @@ All notable changes to Forge should be documented in this file.
 - feature 057: added reusable LLM foundation (`core/llm_foundation.py`) with shared policy/settings/prompt/provider/run-step APIs and integrated delegation from `core/llm_integration.py`
 
 ### Changed
+- feature 093 / issue 36: describe symbol evidence now prioritizes requested-symbol signature anchors and emits explicit uncertainty when no symbol anchor is found
 - feature 092 / issue 35: describe now returns deterministic unresolved-target output for unresolved explicit payloads instead of silently falling back to repo overview
 - feature 091 / issue 34: review regressions now run through dedicated quality-gate matrix covering path/symbol/file target resolution, related-target noise filtering, orchestrator trace, and external-rule interactions
 - feature 090 / issue 33: review now emits central orchestrator trace metadata (`action_orchestration`) via shared mode-orchestrator engine with dedicated regression coverage
