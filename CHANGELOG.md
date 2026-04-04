@@ -13,6 +13,7 @@ All notable changes to Forge should be documented in this file.
 - feature 048: added deterministic `.forge/graph.json` edge cache (incremental file-hash reuse) and read-only graph consumption in explain/query, including optional framework graph references
 - feature 062: added runtime settings foundation (canonical registry + deterministic resolver with source tracing) and wired runtime overrides into CLI bootstrap, profile defaults, doctor diagnostics, and llm mode/model config precedence
 - feature 063: added named session context with repo-local persistence, auto-create + TTL enforcement, `forge session` lifecycle commands, revive flow, and runtime-source integration (`session:<name>`)
+- feature 061: added top-level `forge set/get` runtime settings UX with canonical keys + aliases, scope persistence (`session|repo|user`), and resolved source inspection (`forge get --source`)
 - feature 035: explicit LLM output-language control (`--llm-output-language`, `FORGE_LLM_OUTPUT_LANGUAGE`, `llm.prompt.output_language`)
 - feature 025: `--from-run` support for `explain`/`review`/`test`/`describe` with deterministic payload resolution and provenance metadata
 - feature 024: `forge runs prune` with `--dry-run`, retention criteria (`--keep-last`, `--older-than-days`), config defaults, and safe JSONL rewrite

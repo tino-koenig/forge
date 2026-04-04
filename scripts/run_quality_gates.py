@@ -531,6 +531,148 @@ def gate_runtime_settings_foundation(repo_root: Path) -> None:
         assert_true(query_payload.get("profile") == "detailed", "runtime foundation: execution.profile intensive should map to detailed")
 
 
+def gate_runtime_settings_set_get(repo_root: Path) -> None:
+    forge_dir = repo_root / ".forge"
+    forge_dir.mkdir(parents=True, exist_ok=True)
+    (forge_dir / "config.toml").write_text(
+        (
+            "[llm]\n"
+            'provider = "openai_compatible"\n'
+            "[llm.openai_compatible]\n"
+            'base_url = "mock://openai/v1"\n'
+            'model = "model-from-toml"\n'
+            'api_key_env = "FORGE_LLM_API_KEY"\n'
+            "timeout_s = 2\n"
+        ),
+        encoding="utf-8",
+    )
+
+    # repo scope write/read
+    run_cmd(
+        [
+            "python3",
+            str(FORGE),
+            "--output-format",
+            "json",
+            "--repo-root",
+            str(repo_root),
+            "set",
+            "--scope",
+            "repo",
+            "output",
+            "human",
+        ],
+        cwd=ROOT,
+    )
+    repo_get = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "get",
+                "--scope",
+                "repo",
+                "output",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    repo_current = repo_get.get("sections", {}).get("settings", {}).get("current", {})
+    assert_true(repo_current.get("output.format") == "text", "set/get: repo output.format should be text")
+    assert_true(repo_current.get("output.view") == "standard", "set/get: repo output.view should be standard")
+
+    # session scope write/read + source trace
+    run_cmd(
+        [
+            "python3",
+            str(FORGE),
+            "--output-format",
+            "json",
+            "--repo-root",
+            str(repo_root),
+            "set",
+            "llm",
+            "model",
+            "session-model-061",
+        ],
+        cwd=ROOT,
+    )
+    resolved_get = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "get",
+                "--source",
+                "llm.model",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    resolved = resolved_get.get("sections", {}).get("settings", {})
+    assert_true(
+        resolved.get("current", {}).get("llm.model") == "session-model-061",
+        "set/get: session llm.model should resolve",
+    )
+    llm_model_source = str(resolved.get("sources", {}).get("llm.model", ""))
+    assert_true(
+        llm_model_source.startswith("session:"),
+        "set/get: llm.model source should be session:<name>",
+    )
+
+    with tempfile.TemporaryDirectory() as td:
+        user_runtime = Path(td) / "runtime.toml"
+        env = os.environ.copy()
+        env["FORGE_USER_RUNTIME_TOML"] = str(user_runtime)
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "set",
+                "--scope",
+                "user",
+                "access",
+                "web",
+                "on",
+            ],
+            cwd=ROOT,
+            env=env,
+        )
+        user_get = parse_json_output(
+            run_cmd(
+                [
+                    "python3",
+                    str(FORGE),
+                    "--output-format",
+                    "json",
+                    "--repo-root",
+                    str(repo_root),
+                    "get",
+                    "--scope",
+                    "user",
+                    "access",
+                    "web",
+                ],
+                cwd=ROOT,
+                env=env,
+            ).stdout
+        )
+        user_current = user_get.get("sections", {}).get("settings", {}).get("current", {})
+        assert_true(user_current.get("access.web") is True, "set/get: user access.web should be true")
+
+
 def gate_named_session_context_and_ttl(repo_root: Path) -> None:
     query_payload = parse_json_output(
         run_cmd(
@@ -2506,6 +2648,7 @@ def run_all_gates() -> None:
         gate_config_toml_fallback(temp_repo)
         gate_config_precedence(temp_repo)
         gate_runtime_settings_foundation(temp_repo)
+        gate_runtime_settings_set_get(temp_repo)
         gate_named_session_context_and_ttl(temp_repo)
         gate_env_file_autoload(temp_repo)
         gate_prompt_profile_policy(temp_repo)

@@ -160,3 +160,48 @@ Why preferred solution:
 - output/llm/execution/access families supported as specified
 - safety boundaries are enforced (query remains read-only)
 - docs include key registry, value matrix, and migration notes
+
+## Implemented Behavior (Current)
+
+- Added top-level commands:
+  - `forge set <key> <value> [--scope session|repo|user]`
+  - `forge get [key] [--scope session|repo|user] [--resolved] [--source]`
+- Scope defaults:
+  - `set`: `session`
+  - `get`: resolved effective values
+- Alias support:
+  - `output` preset values: `human`, `json`, `exhaustive`
+  - `llm` and `llm model`
+  - `execution`
+  - `access web`, `access write`
+- Canonical key support:
+  - `output.format`, `output.view`
+  - `llm.mode`, `llm.model`
+  - `execution.profile`
+  - `access.web`, `access.write`
+- Persistence model:
+  - `session`: stored in active named session runtime settings (`.forge/sessions/*.json`)
+  - `repo`: stored in `.forge/runtime.toml`
+  - `user`: stored in user runtime path (`FORGE_USER_RUNTIME_TOML` or default user config path)
+- `forge get --source` exposes effective source tracing, including `session:<name>` for named session values.
+- Unknown keys and invalid values return deterministic actionable errors.
+
+## How To Use
+
+```bash
+forge set output human --scope repo
+forge get output --scope repo
+
+forge set llm off
+forge set llm model local/mistral
+forge get llm --source
+
+forge set execution intensive --scope user
+forge set access web on --scope user
+forge get --resolved --source
+```
+
+## Known Limits / Notes
+
+- `repo`/`user` runtime files are written as canonical dotted-key assignments for deterministic round-tripping.
+- Runtime settings influence behavior only where existing capability contracts allow it; read-only capabilities remain read-only.

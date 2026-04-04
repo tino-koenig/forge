@@ -19,6 +19,8 @@ class Capability(str, Enum):
     RUNS = "runs"
     LOGS = "logs"
     SESSION = "session"
+    SET = "set"
+    GET = "get"
 
 
 class Profile(str, Enum):
@@ -66,6 +68,10 @@ CAPABILITY_POLICIES: dict[Capability, CapabilityPolicy] = {
     Capability.SESSION: CapabilityPolicy(
         allowed_effects=frozenset({EffectClass.READ_ONLY, EffectClass.FORGE_WRITE})
     ),
+    Capability.SET: CapabilityPolicy(
+        allowed_effects=frozenset({EffectClass.READ_ONLY, EffectClass.FORGE_WRITE})
+    ),
+    Capability.GET: CapabilityPolicy(allowed_effects=frozenset({EffectClass.READ_ONLY})),
     Capability.INDEX: CapabilityPolicy(
         allowed_effects=frozenset({EffectClass.READ_ONLY, EffectClass.FORGE_WRITE})
     ),

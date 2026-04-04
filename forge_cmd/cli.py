@@ -31,6 +31,8 @@ REQUIRES_PAYLOAD = {
     "runs": False,
     "logs": False,
     "session": False,
+    "set": False,
+    "get": False,
     "query": True,
     "explain": True,
     "review": True,
@@ -270,7 +272,7 @@ def build_parser() -> argparse.ArgumentParser:
     logs_parser.add_argument(
         "--capability",
         dest="logs_capability",
-        choices=("init", "index", "ask", "query", "explain", "review", "describe", "test", "doctor", "runs", "logs", "session"),
+        choices=("init", "index", "ask", "query", "explain", "review", "describe", "test", "doctor", "runs", "logs", "session", "set", "get"),
         help="Filter by capability name",
     )
     logs_parser.add_argument(
@@ -533,6 +535,45 @@ def build_parser() -> argparse.ArgumentParser:
         "parts",
         nargs="*",
         help="Commands: new <name> | use <name> | list | show [name] | clear-context [name] | end [name]",
+    )
+
+    set_parser = subparsers.add_parser("set", help="Set runtime settings")
+    set_parser.add_argument(
+        "--scope",
+        dest="set_scope",
+        choices=("session", "repo", "user"),
+        default="session",
+        help="Persistence scope (default: session)",
+    )
+    set_parser.add_argument(
+        "parts",
+        nargs="*",
+        help="Usage: set <key> <value> (aliases supported: output, llm, execution, access web|write)",
+    )
+
+    get_parser = subparsers.add_parser("get", help="Get runtime settings")
+    get_parser.add_argument(
+        "--scope",
+        dest="get_scope",
+        choices=("session", "repo", "user"),
+        help="Read raw values from a specific scope",
+    )
+    get_parser.add_argument(
+        "--resolved",
+        dest="get_resolved",
+        action="store_true",
+        help="Resolve effective values across precedence even when --scope is set",
+    )
+    get_parser.add_argument(
+        "--source",
+        dest="get_source",
+        action="store_true",
+        help="Include per-key source information in resolved view",
+    )
+    get_parser.add_argument(
+        "parts",
+        nargs="*",
+        help="Optional key/family selector (e.g. llm.mode, output, access web)",
     )
 
     return parser

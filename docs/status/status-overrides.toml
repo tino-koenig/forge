@@ -372,6 +372,13 @@ implemented_on = "2026-04-04"
 notes = "Added runtime settings foundation with canonical registry, deterministic resolver (cli/session/repo/user/toml/default precedence), source tracing, and bootstrap/config wiring."
 
 [[feature]]
+id = "061"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Added top-level `forge set/get` commands with alias normalization, canonical runtime key support, session/repo/user scope reads+writes, and resolved source tracing (`--source`, including `session:<name>`)."
+
+[[feature]]
 id = "063"
 status = "implemented"
 defined_on = "2026-04-04"
