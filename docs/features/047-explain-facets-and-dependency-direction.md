@@ -89,3 +89,49 @@ Current explain output is strong for local file interpretation but weak for dire
 - explain output contracts include facet-specific edge sections
 - read-only behavior is preserved
 - explain supports source-scoped dependency/resource analysis with explicit source typing
+
+## Implemented Behavior (Current)
+
+- `forge explain` supports `--focus`, `--direction`, and `--source-scope`.
+- Implemented facets for this feature baseline:
+  - `overview` (default)
+  - `symbols` (top-level symbol extraction)
+  - `dependencies` (directional edges)
+  - `resources` (resource/file-reference edges)
+  - `uses` (inbound usage/reference edges)
+- Dependency/resource sections are emitted deterministically in explain contracts:
+  - `dependency_edges_out`
+  - `dependency_edges_in`
+  - `resource_edges`
+- Edge records include:
+  - `source_path`, `target_path|target_raw`, `edge_kind`
+  - evidence anchor (`path`, `line`, `text`)
+  - `confidence`
+  - `source_type`, `target_type`
+  - optional `framework_id`, `framework_version`
+- Explain remains read-only; no repo mutations are performed.
+
+## How To Use
+
+Examples:
+
+```bash
+forge explain core/llm_integration.py --focus overview
+forge explain core/llm_integration.py --focus symbols
+forge explain core/llm_integration.py --focus dependencies --direction out
+forge explain core/llm_integration.py --focus dependencies --direction in
+forge explain core/llm_integration.py --focus resources --source-scope all
+forge explain core/llm_integration.py --focus uses --source-scope repo_only
+```
+
+JSON contract inspection:
+
+```bash
+forge --output-format json explain core/llm_integration.py --focus dependencies --direction in
+```
+
+## Known Limits / Notes
+
+- Dependency/resource extraction is deterministic and lightweight (pattern-based), not a full semantic language graph.
+- `source_scope=framework_only`/`all` depends on configured framework profiles/roots; without configured framework roots, framework-scoped edges may be empty.
+- Inbound dependency scanning is bounded and code-file focused to avoid broad noise from non-code artifacts.
