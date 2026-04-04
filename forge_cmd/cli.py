@@ -9,7 +9,7 @@ from pathlib import Path
 import sys
 import time
 
-from core.capability_model import build_request
+from core.capability_model import Capability, build_request
 from core.capability_model import CommandRequest, Profile
 from core.env_loader import load_env_file
 from core.output_contracts import consume_last_contract, reset_last_contract
@@ -66,6 +66,7 @@ _INIT_NON_MUTATING_STATUSES = {
     "non_tty",
     "invalid_template",
 }
+_LOGS_CAPABILITY_CHOICES = tuple(sorted(capability.value for capability in Capability))
 
 
 def _flag_present(argv_items: list[str], flag: str) -> bool:
@@ -305,7 +306,7 @@ def build_parser() -> argparse.ArgumentParser:
     logs_parser.add_argument(
         "--capability",
         dest="logs_capability",
-        choices=("init", "index", "ask", "query", "explain", "review", "describe", "test", "doctor", "runs", "logs", "session", "set", "get"),
+        choices=_LOGS_CAPABILITY_CHOICES,
         help="Filter by capability name",
     )
     logs_parser.add_argument(

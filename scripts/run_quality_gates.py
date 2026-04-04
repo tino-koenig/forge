@@ -22,7 +22,9 @@ from core.config import (
     DEFAULT_QUERY_PLANNER_MAX_LATENCY_MS,
     DEFAULT_QUERY_PLANNER_MAX_TERMS,
 )
+from core.capability_model import Capability
 from core.protocol_log import append_protocol_events
+from forge_cmd.cli import build_parser
 import tomli
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1771,6 +1773,24 @@ def gate_index_config_contract_docs() -> None:
     )
 
 
+def gate_logs_capability_filter_choices_from_model() -> None:
+    import argparse
+
+    parser = build_parser()
+    subparsers = next((item for item in parser._actions if isinstance(item, argparse._SubParsersAction)), None)
+    assert_true(subparsers is not None, "logs capability choices: expected subparser action")
+    logs_parser = subparsers.choices.get("logs") if hasattr(subparsers, "choices") else None
+    assert_true(logs_parser is not None, "logs capability choices: expected logs subparser")
+    action = next((item for item in logs_parser._actions if getattr(item, "dest", None) == "logs_capability"), None)
+    assert_true(action is not None, "logs capability choices: expected logs_capability action in logs subparser")
+    parser_choices = tuple(sorted(str(item) for item in (action.choices or ())))
+    expected_choices = tuple(sorted(cap.value for cap in Capability))
+    assert_true(
+        parser_choices == expected_choices,
+        "logs capability choices: parser choices must match capability model values",
+    )
+
+
 def gate_doctor_config_validate_unknown_keys(repo_root: Path) -> None:
     forge_dir = repo_root / ".forge"
     forge_dir.mkdir(parents=True, exist_ok=True)
@@ -3369,6 +3389,7 @@ def run_all_gates() -> None:
         gate_doctor_config_validate_logs_protocol_malformed(temp_repo_logs_malformed)
         gate_doctor_config_validate_read_only_sessions(temp_repo)
         gate_index_config_contract_docs()
+        gate_logs_capability_filter_choices_from_model()
         gate_external_review_rules(temp_repo_rules)
         gate_external_review_rules_invalid(temp_repo_rules_invalid)
         gate_from_run_references(temp_repo)
