@@ -4784,6 +4784,46 @@ def gate_review_central_orchestrator_adoption(repo_root: Path) -> None:
         assert_true(expected in action_names, f"review orchestrator: missing expected action '{expected}'")
 
 
+def gate_describe_central_orchestrator_adoption(repo_root: Path) -> None:
+    payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--llm-provider",
+                "mock",
+                "--repo-root",
+                str(repo_root),
+                "describe",
+                "src/service.py",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    sections = payload.get("sections", {})
+    orchestration = sections.get("action_orchestration", {}) if isinstance(sections, dict) else {}
+    assert_true(isinstance(orchestration, dict), "describe orchestrator: expected action_orchestration section")
+    assert_true(
+        orchestration.get("done_reason") == "completed",
+        "describe orchestrator: expected done_reason=completed for resolved target",
+    )
+    usage = orchestration.get("usage", {}) if isinstance(orchestration, dict) else {}
+    assert_true(
+        usage.get("engine") == "core.mode_orchestrator.iter_bounded_cycles",
+        "describe orchestrator: expected central engine annotation",
+    )
+    iterations = orchestration.get("iterations", []) if isinstance(orchestration, dict) else []
+    assert_true(isinstance(iterations, list) and iterations, "describe orchestrator: expected non-empty iterations trace")
+    first = iterations[0] if iterations else {}
+    actions = first.get("actions", []) if isinstance(first, dict) else []
+    assert_true(isinstance(actions, list) and actions, "describe orchestrator: expected action trace entries")
+    action_names = {str(item.get("action")) for item in actions if isinstance(item, dict)}
+    for expected in {"resolve_target", "collect_context", "synthesize", "summarize", "finalize"}:
+        assert_true(expected in action_names, f"describe orchestrator: missing expected action '{expected}'")
+
+
 def gate_review_quality_gate_matrix(repo_root: Path, repo_rules: Path, repo_rules_invalid: Path) -> None:
     gate_review_path_like_target_resolution_contract(repo_root)
     gate_review_runtime_policy_settings(repo_root)
@@ -5383,6 +5423,7 @@ def run_all_gates() -> None:
         gate_explain_runtime_limit_settings(temp_repo)
         gate_explain_central_orchestrator_adoption(temp_repo)
         gate_review_central_orchestrator_adoption(temp_repo)
+        gate_describe_central_orchestrator_adoption(temp_repo)
         gate_mode_capability_contract_query_read_only(temp_repo)
         gate_query_action_orchestration(temp_repo)
         gate_adaptive_query_explain_feedback(temp_repo)

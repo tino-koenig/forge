@@ -14,6 +14,7 @@ from core.capability_model import CommandRequest, Profile
 from core.effects import ExecutionSession
 from core.llm_integration import maybe_refine_summary, resolve_settings
 from core.llm_integration import provenance_section
+from core.mode_orchestrator import iter_bounded_cycles
 from core.output_contracts import build_contract, emit_contract_json
 from core.output_views import is_compact, is_full, resolve_view
 from core.repo_io import iter_repo_files, read_text_file
@@ -541,8 +542,15 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         print(f"Run reference error: {exc}")
         return 1
     request = CommandRequest(capability=request.capability, profile=request.profile, payload=resolved_payload)
+    orchestration_catalog = ["resolve_target", "collect_context", "synthesize", "summarize", "finalize"]
+    orchestration_actions: list[dict[str, object]] = []
+
+    def mark_action(name: str, status: str, detail: str) -> None:
+        orchestration_actions.append({"action": name, "status": status, "detail": detail})
+
     explicit_target = bool(request.payload.strip())
     target = resolve_describe_target(repo_root, request.payload, session)
+    mark_action("resolve_target", "completed", f"resolved kind={target.kind} source={target.source}")
     is_json = args.output_format == "json"
     view = resolve_view(args)
 
@@ -575,6 +583,16 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             "technologies": {"languages": [], "framework_hints": []},
             "architecture_notes": [],
             "status": "unresolved_target",
+            "action_orchestration": {
+                "catalog": orchestration_catalog,
+                "iterations": [{"iteration": 1, "actions": orchestration_actions}],
+                "done_reason": "unresolved_target",
+                "usage": {
+                    "engine": "core.mode_orchestrator.iter_bounded_cycles",
+                    "max_iterations": 1,
+                    "max_wall_time_ms": 1200,
+                },
+            },
         }
         contract = build_contract(
             capability=request.capability.value,
@@ -603,11 +621,52 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     evidence_payload: list[dict[str, object]] = []
     symbol_anchor_found = False
     sections: dict[str, object] = {}
+    done_reason = "completed"
+    cycle = next(iter_bounded_cycles(max_iterations=1, max_wall_time_ms=1200))
+    if cycle.wall_time_exhausted:
+        done_reason = "wall_time_exhausted"
+        mark_action("collect_context", "skipped", "orchestration wall time exhausted")
+        deterministic_summary = "Describe orchestration budget exhausted before context collection."
+        uncertainty = ["Describe orchestration exhausted configured wall-time budget before analysis started."]
+        contract = build_contract(
+            capability=request.capability.value,
+            profile=request.profile.value,
+            summary=deterministic_summary,
+            evidence=[],
+            uncertainty=uncertainty,
+            next_step='Run: forge describe --view full',
+            sections={
+                "target": {"kind": target.kind, "path": str(target.path.relative_to(repo_root)), "source": target.source},
+                "action_orchestration": {
+                    "catalog": orchestration_catalog,
+                    "iterations": [{"iteration": 1, "actions": orchestration_actions}],
+                    "done_reason": done_reason,
+                    "usage": {
+                        "engine": "core.mode_orchestrator.iter_bounded_cycles",
+                        "max_iterations": 1,
+                        "max_wall_time_ms": 1200,
+                    },
+                },
+            },
+        )
+        if is_json:
+            emit_contract_json(contract)
+            return 0
+        print("\n--- Summary ---")
+        print(deterministic_summary)
+        print("\n--- Uncertainty ---")
+        for note in uncertainty:
+            print(f"- {note}")
+        print("\n--- Next Step ---")
+        print('Run: forge describe --view full')
+        return 0
     if target.kind == "repo":
         files = files_from_index_payload(repo_root, index)
         if not files:
             files = iter_repo_files(repo_root, session)
+        mark_action("collect_context", "completed", f"collected repo context from {len(files)} files")
         deterministic_summary = infer_repo_summary(repo_root, files, detect_languages(files), session)
+        mark_action("synthesize", "completed", "assembled repository-level deterministic summary")
         evidence_payload, symbol_anchor_found = collect_describe_evidence(
             target=target,
             repo_root=repo_root,
@@ -636,7 +695,9 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             )
     else:
         files = list_directory_files(target.path, repo_root, session) if target.kind == "directory" else [target.path]
+        mark_action("collect_context", "completed", f"collected target context from {len(files)} file(s)")
         deterministic_summary = infer_target_summary(target, repo_root, session)
+        mark_action("synthesize", "completed", "assembled target-level deterministic summary")
         evidence_payload, symbol_anchor_found = collect_describe_evidence(
             target=target,
             repo_root=repo_root,
@@ -677,11 +738,23 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         resolved_next_step = f"Run: forge explain {rel}"
 
     if llm_outcome:
+        mark_action("summarize", "completed", "applied deterministic+llm summary step")
         sections["llm_usage"] = llm_outcome.usage
         sections["provenance"] = provenance_section(
             llm_used=bool(llm_outcome.usage.get("used")),
             evidence_count=len(evidence_payload),
         )
+    mark_action("finalize", "completed", "assembled final output contract")
+    sections["action_orchestration"] = {
+        "catalog": orchestration_catalog,
+        "iterations": [{"iteration": 1, "actions": orchestration_actions}],
+        "done_reason": done_reason,
+        "usage": {
+            "engine": "core.mode_orchestrator.iter_bounded_cycles",
+            "max_iterations": 1,
+            "max_wall_time_ms": 1200,
+        },
+    }
     if from_run_meta:
         sections.update(from_run_meta)
 

@@ -588,6 +588,13 @@ defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Describe important-file ranking now applies scope-aware deterministic policy and exposes per-path rationale metadata."
 
+[[feature]]
+id = "095"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Describe now exposes central orchestrator trace/runtime metadata under action_orchestration using the shared mode orchestrator engine."
+
 # Issue examples:
 # [[issue]]
 # id = "12"
@@ -784,6 +791,13 @@ status = "implemented"
 defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Describe important-file selection now deprioritizes fixture/test subtree noise and emits ranking rationale metadata."
+
+[[issue]]
+id = "38"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Describe now surfaces shared central orchestrator trace/runtime metadata with dedicated regression gate coverage."
 
 [[issue]]
 id = "6"

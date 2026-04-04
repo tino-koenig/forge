@@ -20,3 +20,29 @@ Adopt shared central orchestration runtime for describe mode.
 - Describe runs via central orchestrator runtime.
 - Describe emits orchestration trace metadata.
 - Mode-local sequencing boilerplate is reduced.
+
+## Implemented Behavior (Current)
+
+- Describe now emits explicit orchestration trace metadata in `sections.action_orchestration`:
+  - action catalog
+  - iteration action trace
+  - done reason
+  - central engine annotation (`core.mode_orchestrator.iter_bounded_cycles`)
+- Describe action trace now covers:
+  - `resolve_target`
+  - `collect_context`
+  - `synthesize`
+  - `summarize`
+  - `finalize`
+- Added regression gate `gate_describe_central_orchestrator_adoption`.
+
+## How To Validate Quickly
+
+- Run:
+  - `python3 scripts/run_quality_gates.py`
+- Verify:
+  - `gate_describe_central_orchestrator_adoption` passes.
+
+## Known Limits / Notes
+
+- Describe orchestration currently runs as bounded single-cycle trace; this keeps behavior deterministic and compatible with future multi-cycle orchestration.
