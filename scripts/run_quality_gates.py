@@ -673,6 +673,87 @@ def gate_runtime_settings_set_get(repo_root: Path) -> None:
         assert_true(user_current.get("access.web") is True, "set/get: user access.web should be true")
 
 
+def gate_init_non_mutating_flows(repo_root: Path) -> None:
+    empty_repo = Path(tempfile.mkdtemp())
+    try:
+        list_payload = parse_json_output(
+            run_cmd(
+                [
+                    "python3",
+                    str(FORGE),
+                    "--output-format",
+                    "json",
+                    "--repo-root",
+                    str(empty_repo),
+                    "init",
+                    "--list-templates",
+                ],
+                cwd=ROOT,
+            ).stdout
+        )
+        assert_true(
+            list_payload.get("sections", {}).get("status") == "templates_listed",
+            "init non-mutating: expected templates_listed status",
+        )
+        assert_true(
+            not (empty_repo / ".forge").exists(),
+            "init non-mutating: --list-templates must not create .forge marker",
+        )
+
+        dry_payload = parse_json_output(
+            run_cmd(
+                [
+                    "python3",
+                    str(FORGE),
+                    "--output-format",
+                    "json",
+                    "--repo-root",
+                    str(empty_repo),
+                    "init",
+                    "--non-interactive",
+                    "--template",
+                    "balanced",
+                    "--dry-run",
+                ],
+                cwd=ROOT,
+            ).stdout
+        )
+        assert_true(
+            dry_payload.get("sections", {}).get("status") == "dry_run",
+            "init non-mutating: expected dry_run status",
+        )
+        assert_true(
+            not (empty_repo / ".forge").exists(),
+            "init non-mutating: --dry-run must not create .forge marker",
+        )
+
+        non_tty = parse_json_output(
+            run_cmd(
+                [
+                    "python3",
+                    str(FORGE),
+                    "--output-format",
+                    "json",
+                    "--repo-root",
+                    str(empty_repo),
+                    "init",
+                ],
+                cwd=ROOT,
+                expect_ok=False,
+            ).stdout
+        )
+        assert_true(
+            non_tty.get("sections", {}).get("status") == "non_tty",
+            "init non-mutating: expected non_tty status in non-interactive shell",
+        )
+        assert_true(
+            not (empty_repo / ".forge").exists(),
+            "init non-mutating: failed non-tty init must not create .forge marker",
+        )
+    finally:
+        shutil.rmtree(empty_repo, ignore_errors=True)
+
+
 def gate_named_session_context_and_ttl(repo_root: Path) -> None:
     query_payload = parse_json_output(
         run_cmd(
@@ -2649,6 +2730,7 @@ def run_all_gates() -> None:
         gate_config_precedence(temp_repo)
         gate_runtime_settings_foundation(temp_repo)
         gate_runtime_settings_set_get(temp_repo)
+        gate_init_non_mutating_flows(temp_repo)
         gate_named_session_context_and_ttl(temp_repo)
         gate_env_file_autoload(temp_repo)
         gate_prompt_profile_policy(temp_repo)

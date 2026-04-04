@@ -214,6 +214,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
 
     if args.list_templates:
         payload = {
+            "status": "templates_listed",
             "templates": [
                 {"id": t.template_id, "description": t.description}
                 for t in TEMPLATES.values()

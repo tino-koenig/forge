@@ -56,10 +56,41 @@ REQUIRES_PAYLOAD = {
 
 FROM_RUN_CAPABILITIES = {"explain", "review", "describe", "test"}
 PROFILE_VALUES = {Profile.SIMPLE.value, Profile.STANDARD.value, Profile.DETAILED.value}
+_INIT_NON_MUTATING_STATUSES = {
+    "templates_listed",
+    "dry_run",
+    "canceled",
+    "overwrite_blocked",
+    "non_tty",
+    "invalid_template",
+}
 
 
 def _flag_present(argv_items: list[str], flag: str) -> bool:
     return any(item == flag or item.startswith(f"{flag}=") for item in argv_items)
+
+
+def _should_persist_run_history(
+    *,
+    capability_name: str,
+    exit_code: int,
+    contract_payload: dict[str, object] | None,
+) -> bool:
+    if capability_name in {"runs", "logs"}:
+        return False
+    if capability_name != "init":
+        return True
+    if exit_code != 0:
+        return False
+    if not isinstance(contract_payload, dict):
+        return True
+    sections = contract_payload.get("sections")
+    if not isinstance(sections, dict):
+        return True
+    status = sections.get("status")
+    if isinstance(status, str) and status in _INIT_NON_MUTATING_STATUSES:
+        return False
+    return True
 
 
 def _nearest_forge_marker_root(start: Path) -> Path | None:
@@ -882,23 +913,29 @@ def main(argv: list[str] | None = None) -> int:
                         usage=orchestration.get("usage") if isinstance(orchestration.get("usage"), dict) else None,
                     )
                 )
-        append_run(
-            repo_root=repo_root,
-            request={
-                "capability": request.capability.value,
-                "profile": request.profile.value,
-                "payload": request.payload,
-                "argv": argv or [],
-            },
-            execution={
-                "exit_code": exit_code,
-                "output_format": args.output_format,
-                "protocol_events": protocol_events,
-            },
-            output={
-                "text": text_output,
-                "contract": contract_payload,
-            },
+        persist_run_history = _should_persist_run_history(
+            capability_name=capability_name,
+            exit_code=exit_code,
+            contract_payload=contract_payload if isinstance(contract_payload, dict) else None,
         )
+        if persist_run_history:
+            append_run(
+                repo_root=repo_root,
+                request={
+                    "capability": request.capability.value,
+                    "profile": request.profile.value,
+                    "payload": request.payload,
+                    "argv": argv or [],
+                },
+                execution={
+                    "exit_code": exit_code,
+                    "output_format": args.output_format,
+                    "protocol_events": protocol_events,
+                },
+                output={
+                    "text": text_output,
+                    "contract": contract_payload,
+                },
+            )
 
     return exit_code
