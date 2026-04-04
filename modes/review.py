@@ -44,6 +44,15 @@ class Finding:
     rule_id: str | None = None
 
 
+@dataclass(frozen=True)
+class ReviewPolicy:
+    large_file_medium_threshold: int
+    large_file_high_threshold: int
+    findings_max_items: int
+    related_max_targets: int
+    evidence_max_per_finding: int
+
+
 def maybe_add(
     findings: list[Finding],
     *,
@@ -71,11 +80,33 @@ def collect_line_evidence(path: Path, content: str, pattern: re.Pattern[str], li
     return [FindingEvidence(path=item.path, line=item.line, text=item.text) for item in items]
 
 
-def detect_large_file(target: ResolvedTarget) -> Finding | None:
+def _resolve_runtime_int(args, key: str, default: int, *, min_value: int = 1, max_value: int = 20000) -> tuple[int, str]:
+    values = getattr(args, "runtime_settings_values", {})
+    sources = getattr(args, "runtime_settings_sources", {})
+    raw = values.get(key) if isinstance(values, dict) else None
+    source = str(sources.get(key) or "default") if isinstance(sources, dict) else "default"
+    if raw is None:
+        return default, "default"
+    try:
+        parsed = int(raw)
+    except (TypeError, ValueError):
+        return default, "default"
+    if parsed < min_value or parsed > max_value:
+        return default, "default"
+    return parsed, source
+
+
+def _cap_finding_evidence(findings: list[Finding], max_items: int) -> list[Finding]:
+    for finding in findings:
+        finding.evidence = finding.evidence[:max_items]
+    return findings
+
+
+def detect_large_file(target: ResolvedTarget, policy: ReviewPolicy) -> Finding | None:
     line_count = len(target.content.splitlines())
-    if line_count < 350:
+    if line_count < policy.large_file_medium_threshold:
         return None
-    severity = "high" if line_count >= 700 else "medium"
+    severity = "high" if line_count >= policy.large_file_high_threshold else "medium"
     evidence = [FindingEvidence(path=target.path, line=1, text=f"file has {line_count} lines")]
     return Finding(
         title="Large File Complexity",
@@ -284,10 +315,10 @@ def gather_related_targets(
     return related
 
 
-def review_target(target: ResolvedTarget, profile: Profile, external_rules: list[ReviewRule]) -> list[Finding]:
+def review_target(target: ResolvedTarget, profile: Profile, external_rules: list[ReviewRule], policy: ReviewPolicy) -> list[Finding]:
     findings: list[Finding] = []
 
-    large_file = detect_large_file(target)
+    large_file = detect_large_file(target, policy)
     if large_file:
         findings.append(large_file)
 
@@ -308,6 +339,7 @@ def review_target(target: ResolvedTarget, profile: Profile, external_rules: list
         findings.append(inline_style)
 
     findings.extend(apply_external_rules(target, external_rules))
+    _cap_finding_evidence(findings, policy.evidence_max_per_finding)
 
     findings.sort(
         key=lambda f: (
@@ -404,6 +436,68 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             else:
                 print("Index: not available, using direct repository scan only")
 
+    large_file_medium_threshold, large_file_medium_source = _resolve_runtime_int(
+        args,
+        "review.large_file.medium_threshold",
+        350,
+        min_value=1,
+        max_value=100000,
+    )
+    large_file_high_threshold, large_file_high_source = _resolve_runtime_int(
+        args,
+        "review.large_file.high_threshold",
+        700,
+        min_value=1,
+        max_value=100000,
+    )
+    if large_file_high_threshold < large_file_medium_threshold:
+        large_file_high_threshold = large_file_medium_threshold
+        large_file_high_source = "default"
+    findings_max_items, findings_max_source = _resolve_runtime_int(
+        args,
+        "review.findings.max_items",
+        15,
+        min_value=1,
+        max_value=200,
+    )
+    related_max_targets, related_max_source = _resolve_runtime_int(
+        args,
+        "review.related.max_targets",
+        3,
+        min_value=1,
+        max_value=50,
+    )
+    evidence_max_per_finding, evidence_max_source = _resolve_runtime_int(
+        args,
+        "review.evidence.max_per_finding",
+        6,
+        min_value=1,
+        max_value=50,
+    )
+    review_policy = ReviewPolicy(
+        large_file_medium_threshold=large_file_medium_threshold,
+        large_file_high_threshold=large_file_high_threshold,
+        findings_max_items=findings_max_items,
+        related_max_targets=related_max_targets,
+        evidence_max_per_finding=evidence_max_per_finding,
+    )
+    review_policy_section = {
+        "values": {
+            "large_file_medium_threshold": review_policy.large_file_medium_threshold,
+            "large_file_high_threshold": review_policy.large_file_high_threshold,
+            "findings_max_items": review_policy.findings_max_items,
+            "related_max_targets": review_policy.related_max_targets,
+            "evidence_max_per_finding": review_policy.evidence_max_per_finding,
+        },
+        "sources": {
+            "large_file_medium_threshold": large_file_medium_source,
+            "large_file_high_threshold": large_file_high_source,
+            "findings_max_items": findings_max_source,
+            "related_max_targets": related_max_source,
+            "evidence_max_per_finding": evidence_max_source,
+        },
+    }
+
     if target is None:
         if path_like_target:
             summary = "Target path could not be resolved to a readable repository file."
@@ -425,7 +519,11 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             evidence=[],
             uncertainty=uncertainty,
             next_step=next_step,
-            sections={"findings": [], "review_rules": {"loaded": len(external_rules), "errors": rule_errors}},
+            sections={
+                "findings": [],
+                "review_policy": review_policy_section,
+                "review_rules": {"loaded": len(external_rules), "errors": rule_errors},
+            },
         )
         if is_json:
             if from_run_meta:
@@ -441,12 +539,13 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         print(next_step)
         return 0
 
-    primary_findings = review_target(target, request.profile, external_rules)
+    primary_findings = review_target(target, request.profile, external_rules, review_policy)
     all_findings = list(primary_findings)
     related_count = 0
 
     if request.profile in {Profile.STANDARD, Profile.DETAILED}:
         related_limit = 1 if request.profile == Profile.STANDARD else 3
+        related_limit = min(related_limit, review_policy.related_max_targets)
         related_targets = gather_related_targets(
             repo_root,
             target,
@@ -456,13 +555,14 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         )
         related_count = len(related_targets)
         for related in related_targets:
-            all_findings.extend(review_target(related, request.profile, external_rules))
+            all_findings.extend(review_target(related, request.profile, external_rules, review_policy))
 
     all_findings.sort(
         key=lambda f: (SEVERITY_ORDER.get(f.severity, 0), len(f.evidence)),
         reverse=True,
     )
-    max_findings = 6 if request.profile == Profile.SIMPLE else 10 if request.profile == Profile.STANDARD else 15
+    profile_max_findings = 6 if request.profile == Profile.SIMPLE else 10 if request.profile == Profile.STANDARD else 15
+    max_findings = min(profile_max_findings, review_policy.findings_max_items)
     capped_findings = all_findings[:max_findings]
     uncertainty = [
         "Review findings are heuristic and may miss context outside scanned files.",
@@ -521,6 +621,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         sections={
             "findings": findings_payload,
             "target_source": target.source,
+            "review_policy": review_policy_section,
             "review_rules": {"loaded": len(external_rules), "errors": rule_errors},
             "llm_usage": llm_outcome.usage,
             "provenance": provenance_section(

@@ -539,6 +539,13 @@ defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Review now treats unresolved path-like targets as deterministic unresolved results (no symbol fallback) while preserving symbol fallback for symbol-like inputs."
 
+[[feature]]
+id = "088"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Review policy thresholds/caps are now runtime-configurable and source-traceable in sections.review_policy."
+
 # Issue examples:
 # [[issue]]
 # id = "12"
@@ -686,6 +693,13 @@ status = "implemented"
 defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Review no longer falls back to symbol matching for unresolved path-like payloads and now returns deterministic unresolved guidance."
+
+[[issue]]
+id = "31"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Review heuristic thresholds and output caps are now configurable via runtime settings with source tracing."
 
 [[issue]]
 id = "6"

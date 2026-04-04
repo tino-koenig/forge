@@ -177,6 +177,46 @@ RUNTIME_SETTINGS_REGISTRY: dict[str, RuntimeSettingSpec] = {
         scope_support=frozenset({"session", "repo", "user"}),
         description="Maximum symbol entries in explain symbols facet.",
     ),
+    "review.large_file.medium_threshold": RuntimeSettingSpec(
+        key="review.large_file.medium_threshold",
+        value_type="int",
+        allowed_values=None,
+        default=350,
+        scope_support=frozenset({"session", "repo", "user"}),
+        description="Line-count threshold where review starts flagging large-file complexity.",
+    ),
+    "review.large_file.high_threshold": RuntimeSettingSpec(
+        key="review.large_file.high_threshold",
+        value_type="int",
+        allowed_values=None,
+        default=700,
+        scope_support=frozenset({"session", "repo", "user"}),
+        description="Line-count threshold where large-file complexity severity becomes high.",
+    ),
+    "review.findings.max_items": RuntimeSettingSpec(
+        key="review.findings.max_items",
+        value_type="int",
+        allowed_values=None,
+        default=15,
+        scope_support=frozenset({"session", "repo", "user"}),
+        description="Global cap for number of review findings retained in output.",
+    ),
+    "review.related.max_targets": RuntimeSettingSpec(
+        key="review.related.max_targets",
+        value_type="int",
+        allowed_values=None,
+        default=3,
+        scope_support=frozenset({"session", "repo", "user"}),
+        description="Maximum related files reviewed for contextual findings.",
+    ),
+    "review.evidence.max_per_finding": RuntimeSettingSpec(
+        key="review.evidence.max_per_finding",
+        value_type="int",
+        allowed_values=None,
+        default=6,
+        scope_support=frozenset({"session", "repo", "user"}),
+        description="Maximum evidence lines retained per review finding.",
+    ),
 }
 
 
@@ -264,6 +304,11 @@ def expand_runtime_alias(
         "explain.defaults.max.items": "explain.defaults.max_items",
         "explain.outputs.max.items": "explain.outputs.max_items",
         "explain.symbols.max.items": "explain.symbols.max_items",
+        "review.large.file.medium.threshold": "review.large_file.medium_threshold",
+        "review.large.file.high.threshold": "review.large_file.high_threshold",
+        "review.findings.max.items": "review.findings.max_items",
+        "review.related.max.targets": "review.related.max_targets",
+        "review.evidence.max.per.finding": "review.evidence.max_per_finding",
     }
 
     if key_norm == "output":

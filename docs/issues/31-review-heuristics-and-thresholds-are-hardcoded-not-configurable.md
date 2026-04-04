@@ -27,3 +27,21 @@ Review detection thresholds and caps are hardcoded in mode logic, reducing adapt
 ## Linked Features
 
 - [Feature 088 - Review Runtime Settings Surface for Heuristic Policy](/Users/tino/PhpstormProjects/forge/docs/features/088-review-runtime-settings-surface-for-heuristic-policy.md)
+
+## Implemented Behavior (Current)
+
+- Review policy now exposes runtime-configurable keys for large-file thresholds, findings cap, related-target cap, and per-finding evidence cap.
+- Review emits `sections.review_policy` with effective `values` and `sources` for transparent source tracing.
+- Runtime overrides now deterministically affect review output behavior.
+- Regression coverage added via `gate_review_runtime_policy_settings`.
+
+## How To Validate Quickly
+
+- Run:
+  - `python3 scripts/run_quality_gates.py`
+- Verify:
+  - `gate_review_runtime_policy_settings` passes.
+
+## Known Limits / Notes
+
+- Detector-local evidence collection limits remain in place; runtime policy caps the final per-finding evidence payload consistently.

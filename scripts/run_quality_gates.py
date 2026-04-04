@@ -3046,6 +3046,8 @@ def gate_external_review_rules_invalid(repo_root: Path) -> None:
 
 
 def gate_review_path_like_target_resolution_contract(repo_root: Path) -> None:
+    forge_dir = repo_root / ".forge"
+    forge_dir.mkdir(parents=True, exist_ok=True)
     unresolved_path_like = parse_json_output(
         run_cmd(
             [
@@ -3095,6 +3097,113 @@ def gate_review_path_like_target_resolution_contract(repo_root: Path) -> None:
     assert_true(
         symbol_like.get("sections", {}).get("target_source") == "symbol",
         "review path-like: symbol-like payload should still use symbol fallback",
+    )
+
+
+def gate_review_runtime_policy_settings(repo_root: Path) -> None:
+    forge_dir = repo_root / ".forge"
+    forge_dir.mkdir(parents=True, exist_ok=True)
+    fixture_path = repo_root / "src" / "review_runtime_fixture.py"
+    fixture_path.write_text(
+        "\n".join(
+            [
+                "def fixture_controller():",
+                "    # TODO: first marker",
+                "    # TODO: second marker",
+                "    # TODO: third marker",
+                "    # TODO: fourth marker",
+                "    if True:",
+                "        pass",
+                "    if True:",
+                "        pass",
+                "    if True:",
+                "        pass",
+                "    return 0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    default_payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "review",
+                "src/review_runtime_fixture.py",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    default_policy = default_payload.get("sections", {}).get("review_policy", {})
+    default_values = default_policy.get("values", {}) if isinstance(default_policy, dict) else {}
+    default_sources = default_policy.get("sources", {}) if isinstance(default_policy, dict) else {}
+    assert_true(default_values.get("large_file_medium_threshold") == 350, "review runtime policy: expected default medium threshold=350")
+    assert_true(default_values.get("large_file_high_threshold") == 700, "review runtime policy: expected default high threshold=700")
+    assert_true(default_values.get("findings_max_items") == 15, "review runtime policy: expected default findings_max_items=15")
+    assert_true(default_values.get("related_max_targets") == 3, "review runtime policy: expected default related_max_targets=3")
+    assert_true(default_values.get("evidence_max_per_finding") == 6, "review runtime policy: expected default evidence_max_per_finding=6")
+    assert_true(default_sources.get("large_file_medium_threshold") == "default", "review runtime policy: expected default source for medium threshold")
+    assert_true(
+        not any(
+            isinstance(item, dict) and item.get("title") == "Large File Complexity"
+            for item in default_payload.get("sections", {}).get("findings", [])
+        ),
+        "review runtime policy: fixture should not trigger large-file finding with defaults",
+    )
+
+    (forge_dir / "runtime.toml").write_text(
+        "\n".join(
+            [
+                '"review.large_file.medium_threshold" = 5',
+                '"review.large_file.high_threshold" = 8',
+                '"review.findings.max_items" = 1',
+                '"review.related.max_targets" = 1',
+                '"review.evidence.max_per_finding" = 1',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    override_payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "review",
+                "src/review_runtime_fixture.py",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    override_sections = override_payload.get("sections", {})
+    override_policy = override_sections.get("review_policy", {})
+    override_values = override_policy.get("values", {}) if isinstance(override_policy, dict) else {}
+    override_sources = override_policy.get("sources", {}) if isinstance(override_policy, dict) else {}
+    assert_true(override_values.get("large_file_medium_threshold") == 5, "review runtime policy: expected medium threshold override")
+    assert_true(override_values.get("large_file_high_threshold") == 8, "review runtime policy: expected high threshold override")
+    assert_true(override_values.get("findings_max_items") == 1, "review runtime policy: expected findings_max_items override")
+    assert_true(override_values.get("related_max_targets") == 1, "review runtime policy: expected related_max_targets override")
+    assert_true(override_values.get("evidence_max_per_finding") == 1, "review runtime policy: expected evidence cap override")
+    assert_true(override_sources.get("findings_max_items") == "repo", "review runtime policy: expected repo source for findings max")
+    override_findings = override_sections.get("findings", [])
+    assert_true(len(override_findings) == 1, "review runtime policy: expected findings cap to reduce output to one item")
+    assert_true(
+        isinstance(override_findings[0], dict) and override_findings[0].get("title") == "Large File Complexity",
+        "review runtime policy: expected large-file finding after threshold override",
+    )
+    evidence = override_findings[0].get("evidence", []) if isinstance(override_findings[0], dict) else []
+    assert_true(
+        isinstance(evidence, list) and len(evidence) <= 1,
+        "review runtime policy: expected per-finding evidence cap to be applied",
     )
 
 
@@ -4980,6 +5089,7 @@ def run_all_gates() -> None:
         gate_external_review_rules(temp_repo_rules)
         gate_external_review_rules_invalid(temp_repo_rules_invalid)
         gate_review_path_like_target_resolution_contract(temp_repo)
+        gate_review_runtime_policy_settings(temp_repo)
         gate_from_run_references(temp_repo)
         gate_run_history_contract_always_persisted(temp_repo)
         gate_protocol_log_storage_jsonl(temp_repo)

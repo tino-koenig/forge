@@ -97,7 +97,7 @@ Status values:
 | 085 | Explain Runtime Settings Surface for Facet Limits | 2026-04-04 | implemented | 2026-04-04 | [085-explain-runtime-settings-surface-for-facet-limits.md](/Users/tino/PhpstormProjects/forge/docs/features/085-explain-runtime-settings-surface-for-facet-limits.md) |
 | 086 | Explain Adoption of Central Mode Orchestrator | 2026-04-04 | implemented | 2026-04-04 | [086-explain-adoption-of-central-mode-orchestrator.md](/Users/tino/PhpstormProjects/forge/docs/features/086-explain-adoption-of-central-mode-orchestrator.md) |
 | 087 | Review Target Resolution Contract for Path-like Inputs | 2026-04-04 | implemented | 2026-04-04 | [087-review-target-resolution-contract-for-path-like-inputs.md](/Users/tino/PhpstormProjects/forge/docs/features/087-review-target-resolution-contract-for-path-like-inputs.md) |
-| 088 | Review Runtime Settings Surface for Heuristic Policy | 2026-04-04 | defined | - | [088-review-runtime-settings-surface-for-heuristic-policy.md](/Users/tino/PhpstormProjects/forge/docs/features/088-review-runtime-settings-surface-for-heuristic-policy.md) |
+| 088 | Review Runtime Settings Surface for Heuristic Policy | 2026-04-04 | implemented | 2026-04-04 | [088-review-runtime-settings-surface-for-heuristic-policy.md](/Users/tino/PhpstormProjects/forge/docs/features/088-review-runtime-settings-surface-for-heuristic-policy.md) |
 | 089 | Related-Target Retrieval Foundation for Review and Explain | 2026-04-04 | defined | - | [089-related-target-retrieval-foundation-for-review-and-explain.md](/Users/tino/PhpstormProjects/forge/docs/features/089-related-target-retrieval-foundation-for-review-and-explain.md) |
 | 090 | Review Adoption of Central Mode Orchestrator | 2026-04-04 | defined | - | [090-review-adoption-of-central-mode-orchestrator.md](/Users/tino/PhpstormProjects/forge/docs/features/090-review-adoption-of-central-mode-orchestrator.md) |
 | 091 | Review Quality Gate Matrix Extension | 2026-04-04 | defined | - | [091-review-quality-gate-matrix-extension.md](/Users/tino/PhpstormProjects/forge/docs/features/091-review-quality-gate-matrix-extension.md) |
@@ -188,6 +188,7 @@ Status values:
 - 085: Added runtime-configurable explain facet limits with source-traceable explain_limits output and override/default regression coverage.
 - 086: Explain now exposes central orchestrator runtime/trace metadata under action_orchestration with dedicated regression gate coverage.
 - 087: Review now treats unresolved path-like targets as deterministic unresolved results (no symbol fallback) while preserving symbol fallback for symbol-like inputs.
+- 088: Review policy thresholds/caps are now runtime-configurable and source-traceable in sections.review_policy.
 - 111: Extracted reusable protocol analytics/filtering foundation from logs mode and added direct foundation gate coverage.
 - 115: Expanded init gate matrix to lock non-mutating safety, overwrite/force contract, template-output contract, and onboarding coherence.
 - 116: Centralized init template/option registry and derived CLI/mode choices from shared init foundation with parser drift gate.
