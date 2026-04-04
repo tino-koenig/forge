@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from core.protocol_log import append_protocol_events
+import tomli
 
 ROOT = Path(__file__).resolve().parents[1]
 FORGE = ROOT / "forge.py"
@@ -704,6 +705,47 @@ def gate_runtime_settings_set_get(repo_root: Path) -> None:
         )
         user_current = user_get.get("sections", {}).get("settings", {}).get("current", {})
         assert_true(user_current.get("access.web") is True, "set/get: user access.web should be true")
+
+
+def gate_runtime_scope_round_trip_preservation(repo_root: Path) -> None:
+    forge_dir = repo_root / ".forge"
+    forge_dir.mkdir(parents=True, exist_ok=True)
+    runtime_path = forge_dir / "runtime.toml"
+    runtime_path.write_text(
+        (
+            "[unknown]\n"
+            'key = "keep-me"\n'
+            "[llm]\n"
+            'mode = "off"\n'
+        ),
+        encoding="utf-8",
+    )
+
+    run_cmd(
+        [
+            "python3",
+            str(FORGE),
+            "--output-format",
+            "json",
+            "--repo-root",
+            str(repo_root),
+            "set",
+            "--scope",
+            "repo",
+            "output.view",
+            "full",
+        ],
+        cwd=ROOT,
+    )
+
+    payload = tomli.loads(runtime_path.read_text(encoding="utf-8"))
+    unknown_value = payload.get("unknown.key")
+    assert_true(
+        unknown_value == "keep-me",
+        "runtime round-trip: unknown keys must be preserved after forge set --scope repo",
+    )
+    assert_true(payload.get("llm.mode") == "off", "runtime round-trip: existing canonical values should persist")
+    assert_true(payload.get("output.view") == "full", "runtime round-trip: updated canonical key should be written")
 
 
 def gate_init_non_mutating_flows(repo_root: Path) -> None:
@@ -2861,6 +2903,7 @@ def run_all_gates() -> None:
         gate_config_precedence(temp_repo)
         gate_runtime_settings_foundation(temp_repo)
         gate_runtime_settings_set_get(temp_repo)
+        gate_runtime_scope_round_trip_preservation(temp_repo)
         gate_init_non_mutating_flows(temp_repo)
         gate_init_invalid_target_no_write(temp_repo)
         gate_named_session_context_and_ttl(temp_repo)

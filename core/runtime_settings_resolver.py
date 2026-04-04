@@ -21,6 +21,7 @@ from core.session_store import ensure_active_session, get_active_session, update
 SESSION_DEFAULT_TTL_KEY = "session.default_ttl_minutes"
 MIN_SESSION_TTL_MINUTES = 1
 MAX_SESSION_TTL_MINUTES = 24 * 60
+_CANONICAL_RUNTIME_KEYS = frozenset(RUNTIME_SETTINGS_REGISTRY.keys())
 
 
 @dataclass(frozen=True)
@@ -305,8 +306,19 @@ def save_runtime_scope(scope: str, values: dict[str, object], repo_root: Path) -
     path = _runtime_scope_path(scope, repo_root)
     if path is None:
         return False, f"unsupported runtime scope: {scope}"
+    existing_payload = _load_toml(path)
+    existing_flat = _flatten_mapping(existing_payload) if isinstance(existing_payload, dict) else {}
+    merged_flat: dict[str, object] = {}
+    for raw_key, raw_value in existing_flat.items():
+        if raw_key in _CANONICAL_RUNTIME_KEYS:
+            continue
+        merged_flat[raw_key] = raw_value
+    for canonical_key, canonical_value in values.items():
+        if canonical_value is None:
+            continue
+        merged_flat[canonical_key] = canonical_value
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_render_scope_toml(values), encoding="utf-8")
+    path.write_text(_render_scope_toml(merged_flat), encoding="utf-8")
     return True, str(path)
 
 
