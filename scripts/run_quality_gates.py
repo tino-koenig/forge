@@ -1487,6 +1487,30 @@ def gate_doctor_config_validate_matrix_malformed(repo_root: Path) -> None:
     assert_true(cfg_validation and cfg_validation[0].get("status") == "fail", "config validate matrix: config_validation should fail")
 
 
+def gate_doctor_config_validate_read_only_sessions(repo_root: Path) -> None:
+    sessions_dir = repo_root / ".forge" / "sessions"
+    if sessions_dir.exists():
+        shutil.rmtree(sessions_dir)
+
+    run_cmd(
+        ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "doctor"],
+        cwd=ROOT,
+    )
+    assert_true(
+        not sessions_dir.exists(),
+        "doctor read-only: doctor must not create .forge/sessions",
+    )
+
+    run_cmd(
+        ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "config", "validate"],
+        cwd=ROOT,
+    )
+    assert_true(
+        not sessions_dir.exists(),
+        "doctor read-only: config validate must not create .forge/sessions",
+    )
+
+
 def gate_frontend_fixture(frontend_repo: Path) -> None:
     describe_payload = parse_json_output(
         run_cmd(
@@ -2789,6 +2813,7 @@ def run_all_gates() -> None:
         gate_frontend_fixture(temp_repo_frontend)
         gate_mixed_fixture_describe(temp_repo_mixed)
         gate_doctor_config_validate_matrix_malformed(temp_repo_malformed)
+        gate_doctor_config_validate_read_only_sessions(temp_repo)
         gate_external_review_rules(temp_repo_rules)
         gate_external_review_rules_invalid(temp_repo_rules_invalid)
         gate_from_run_references(temp_repo)

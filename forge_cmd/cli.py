@@ -691,7 +691,6 @@ def main(argv: list[str] | None = None) -> int:
         "review",
         "describe",
         "test",
-        "doctor",
     }
     args.active_session_name = None
     if capability_name in runtime_consuming_capabilities:
