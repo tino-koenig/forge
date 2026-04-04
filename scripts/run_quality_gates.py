@@ -4085,6 +4085,34 @@ def gate_explain_facet_semantics_validation(repo_root: Path) -> None:
     )
 
 
+def gate_explain_analysis_foundation_extraction(repo_root: Path) -> None:
+    _ = repo_root
+    foundation_path = ROOT / "core" / "explain_analysis_foundation.py"
+    assert_true(foundation_path.exists(), "explain foundation: expected core/explain_analysis_foundation.py")
+    foundation_code = foundation_path.read_text(encoding="utf-8")
+    explain_code = (ROOT / "modes" / "explain.py").read_text(encoding="utf-8")
+    assert_true(
+        "def extract_settings_influences(" in foundation_code
+        and "def extract_default_values(" in foundation_code
+        and "def extract_llm_participation(" in foundation_code
+        and "def extract_output_surfaces(" in foundation_code
+        and "def extract_symbol_facts(" in foundation_code,
+        "explain foundation: expected facet extraction primitives in core foundation module",
+    )
+    assert_true(
+        "from core.explain_analysis_foundation import (" in explain_code,
+        "explain foundation: explain mode must import core analysis foundation",
+    )
+    assert_true(
+        "def extract_settings_influences(" not in explain_code
+        and "def extract_default_values(" not in explain_code
+        and "def extract_llm_participation(" not in explain_code
+        and "def extract_output_surfaces(" not in explain_code
+        and "def extract_symbol_facts(" not in explain_code,
+        "explain foundation: explain mode should not keep duplicate local extraction primitives",
+    )
+
+
 def gate_mode_capability_contract_query_read_only(repo_root: Path) -> None:
     before = snapshot_repo_files(repo_root)
     payload = parse_json_output(
@@ -4671,6 +4699,7 @@ def run_all_gates() -> None:
         gate_explain_facet_quality_matrix(temp_repo)
         gate_explain_output_surface_precision(temp_repo)
         gate_explain_facet_semantics_validation(temp_repo)
+        gate_explain_analysis_foundation_extraction(temp_repo)
         gate_mode_capability_contract_query_read_only(temp_repo)
         gate_query_action_orchestration(temp_repo)
         gate_adaptive_query_explain_feedback(temp_repo)

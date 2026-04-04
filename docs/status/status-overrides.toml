@@ -511,6 +511,13 @@ defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Normalized explain uses-direction semantics with explicit requested/effective metadata and regression gate coverage."
 
+[[feature]]
+id = "084"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Extracted explain facet-analysis primitives into core/explain_analysis_foundation.py and removed duplicate local extractor implementations from mode layer."
+
 # Issue examples:
 # [[issue]]
 # id = "12"
@@ -630,6 +637,13 @@ status = "implemented"
 defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Explain uses now enforces inbound effective direction with explicit normalization metadata and deterministic gate validation."
+
+[[issue]]
+id = "27"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Refactored explain facet-analysis logic into shared core foundation module with dedicated regression gate enforcement."
 
 [[issue]]
 id = "6"

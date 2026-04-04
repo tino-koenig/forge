@@ -25,3 +25,20 @@ This reduces reuse and makes cross-mode consistency harder to maintain.
 ## Linked Features
 
 - [Feature 084 - Explain Analysis Foundation Extraction](/Users/tino/PhpstormProjects/forge/docs/features/084-explain-analysis-foundation-extraction.md)
+
+## Implemented Behavior (Current)
+
+- Explain facet-analysis primitives were moved into a dedicated core module (`core/explain_analysis_foundation.py`).
+- The explain mode now consumes this shared foundation and no longer keeps duplicate local extraction implementations.
+- A regression gate verifies that foundation extraction remains in place.
+
+## How To Validate Quickly
+
+- Run:
+  - `python3 scripts/run_quality_gates.py`
+- Verify:
+  - `gate_explain_analysis_foundation_extraction` passes.
+
+## Known Limits / Notes
+
+- This increment addresses the facet-analysis portion of the monolith; additional orchestration/runtime extraction is tracked separately.

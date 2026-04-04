@@ -93,7 +93,7 @@ Status values:
 | 081 | Explain Facet Quality Gate Matrix | 2026-04-04 | implemented | 2026-04-04 | [081-explain-facet-quality-gate-matrix.md](/Users/tino/PhpstormProjects/forge/docs/features/081-explain-facet-quality-gate-matrix.md) |
 | 082 | Explain Output Surface Precision Contract | 2026-04-04 | implemented | 2026-04-04 | [082-explain-output-surface-precision-contract.md](/Users/tino/PhpstormProjects/forge/docs/features/082-explain-output-surface-precision-contract.md) |
 | 083 | Explain Facet Semantics and Argument Validation Contract | 2026-04-04 | implemented | 2026-04-04 | [083-explain-facet-semantics-and-argument-validation-contract.md](/Users/tino/PhpstormProjects/forge/docs/features/083-explain-facet-semantics-and-argument-validation-contract.md) |
-| 084 | Explain Analysis Foundation Extraction | 2026-04-04 | defined | - | [084-explain-analysis-foundation-extraction.md](/Users/tino/PhpstormProjects/forge/docs/features/084-explain-analysis-foundation-extraction.md) |
+| 084 | Explain Analysis Foundation Extraction | 2026-04-04 | implemented | 2026-04-04 | [084-explain-analysis-foundation-extraction.md](/Users/tino/PhpstormProjects/forge/docs/features/084-explain-analysis-foundation-extraction.md) |
 | 085 | Explain Runtime Settings Surface for Facet Limits | 2026-04-04 | defined | - | [085-explain-runtime-settings-surface-for-facet-limits.md](/Users/tino/PhpstormProjects/forge/docs/features/085-explain-runtime-settings-surface-for-facet-limits.md) |
 | 086 | Explain Adoption of Central Mode Orchestrator | 2026-04-04 | defined | - | [086-explain-adoption-of-central-mode-orchestrator.md](/Users/tino/PhpstormProjects/forge/docs/features/086-explain-adoption-of-central-mode-orchestrator.md) |
 | 087 | Review Target Resolution Contract for Path-like Inputs | 2026-04-04 | defined | - | [087-review-target-resolution-contract-for-path-like-inputs.md](/Users/tino/PhpstormProjects/forge/docs/features/087-review-target-resolution-contract-for-path-like-inputs.md) |
@@ -184,6 +184,7 @@ Status values:
 - 081: Added explain facet quality-gate matrix with alias/flag parity, facet section contracts, direction/scope checks, and conflict negative tests.
 - 082: Tightened explain:outputs to producer-only evidence and added regression coverage against passive path-mention false positives.
 - 083: Normalized explain uses-direction semantics with explicit requested/effective metadata and regression gate coverage.
+- 084: Extracted explain facet-analysis primitives into core/explain_analysis_foundation.py and removed duplicate local extractor implementations from mode layer.
 - 111: Extracted reusable protocol analytics/filtering foundation from logs mode and added direct foundation gate coverage.
 - 115: Expanded init gate matrix to lock non-mutating safety, overwrite/force contract, template-output contract, and onboarding coherence.
 - 116: Centralized init template/option registry and derived CLI/mode choices from shared init foundation with parser drift gate.
