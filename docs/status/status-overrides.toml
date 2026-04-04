@@ -1012,6 +1012,13 @@ implemented_on = "2026-04-04"
 notes = "Session scope source metadata is now consistent with effective source origin."
 
 [[issue]]
+id = "5"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Quality gate runner now supports focused --only gate execution with actionable invalid-name diagnostics."
+
+[[issue]]
 id = "7"
 status = "implemented"
 defined_on = "2026-04-04"

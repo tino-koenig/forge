@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
+import inspect
 import json
 import os
 import re
@@ -47,10 +49,35 @@ FIXTURE_BASIC_SRC = ROOT / "tests" / "fixtures" / "basic_repo"
 FIXTURE_FRONTEND_SRC = ROOT / "tests" / "fixtures" / "frontend_repo"
 FIXTURE_MIXED_SRC = ROOT / "tests" / "fixtures" / "mixed_sparse_repo"
 FIXTURE_MALFORMED_SRC = ROOT / "tests" / "fixtures" / "malformed_repo"
+_SELECTED_GATES: list[str] = []
 
 
 class GateError(RuntimeError):
     pass
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run Forge quality gates.")
+    parser.add_argument(
+        "--only",
+        action="append",
+        default=[],
+        help="Run only selected gate(s). Repeat flag or pass comma-separated names.",
+    )
+    return parser.parse_args(argv)
+
+
+def normalize_only_filters(raw_values: list[str]) -> list[str]:
+    selected: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_values:
+        for part in raw.split(","):
+            name = part.strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            selected.append(name)
+    return selected
 
 
 def run_cmd(
@@ -5670,6 +5697,45 @@ def run_all_gates() -> None:
         shutil.copytree(FIXTURE_BASIC_SRC, temp_repo_rules)
         shutil.copytree(FIXTURE_BASIC_SRC, temp_repo_rules_invalid)
 
+        fixtures_by_param: dict[str, Path] = {
+            "repo_root": temp_repo,
+            "frontend_repo": temp_repo_frontend,
+            "mixed_repo": temp_repo_mixed,
+            "repo_rules": temp_repo_rules,
+            "repo_rules_invalid": temp_repo_rules_invalid,
+        }
+
+        gate_functions: dict[str, object] = {
+            name: obj
+            for name, obj in globals().items()
+            if name.startswith("gate_") and callable(obj)
+        }
+
+        if _SELECTED_GATES:
+            unknown = [name for name in _SELECTED_GATES if name not in gate_functions]
+            if unknown:
+                known = ", ".join(sorted(gate_functions.keys()))
+                raise GateError(
+                    "Unknown gate name(s): "
+                    f"{', '.join(unknown)}. "
+                    f"Available gates: {known}"
+                )
+            print(f"[quality-gates] Running selected gates ({len(_SELECTED_GATES)}): {', '.join(_SELECTED_GATES)}")
+            for gate_name in _SELECTED_GATES:
+                fn = gate_functions[gate_name]
+                sig = inspect.signature(fn)
+                args: list[Path] = []
+                for param in sig.parameters:
+                    fixture = fixtures_by_param.get(param)
+                    if fixture is None:
+                        raise GateError(
+                            f"Gate '{gate_name}' has unsupported parameter '{param}' "
+                            "for --only execution"
+                        )
+                    args.append(fixture)
+                fn(*args)
+            return
+
         gate_behavior_smoke(temp_repo)
         gate_module_invocation_compat(temp_repo)
         gate_output_contract(temp_repo)
@@ -5754,6 +5820,9 @@ def run_all_gates() -> None:
 
 
 def main() -> int:
+    global _SELECTED_GATES
+    args = parse_args()
+    _SELECTED_GATES = normalize_only_filters(args.only)
     try:
         run_all_gates()
     except GateError as exc:

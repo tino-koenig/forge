@@ -39,6 +39,7 @@ All notable changes to Forge should be documented in this file.
 - feature 057: added reusable LLM foundation (`core/llm_foundation.py`) with shared policy/settings/prompt/provider/run-step APIs and integrated delegation from `core/llm_integration.py`
 
 ### Changed
+- issue 5: quality-gate runner now supports focused `--only` execution (repeat/comma forms), keeps default full-suite behavior unchanged, and fails fast on unknown gate names with actionable diagnostics
 - feature 069 / issue 10: `forge index` now persists graph-build failure warnings to `.forge/index.json` (`graph.warning`) so artifact metadata matches console graph-status output
 - feature 071 / issue 13: framework graph refs now enforce schema/version validation on load, exclude invalid refs from active usage, and expose per-ref validation warnings in query/explain `graph_usage`
 - feature 070 / issue 12: repo graph load now validates schema/version compatibility, rejects invalid payloads deterministically, and exposes graph validation state/warnings in query/explain graph_usage
