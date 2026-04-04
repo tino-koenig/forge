@@ -161,6 +161,7 @@ class ResolvedProtocolLogConfig:
     max_events_count: int
     allow_full_prompt_until: datetime | None
     source: dict[str, str]
+    validation_errors: list[str]
 
 
 def _load_toml(path: Path) -> dict[str, Any]:
@@ -720,6 +721,8 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
     validation_errors.extend(
         _find_unknown_config_keys(local_payload, schema=_CONFIG_SCHEMA, source_label="config.local.toml")
     )
+    protocol_config = resolve_protocol_log_config(repo_root)
+    validation_errors.extend(protocol_config.validation_errors)
     if provider is not None and provider not in {"openai_compatible", "mock"}:
         validation_errors.append(f"unknown provider '{provider}'")
     if provider == "openai_compatible":
@@ -865,16 +868,46 @@ def resolve_protocol_log_config(repo_root: Path) -> ResolvedProtocolLogConfig:
         ]
     )
 
+    validation_errors: list[str] = []
     max_file_size_bytes = _int_or_default(max_file_size_raw, DEFAULT_LOGS_PROTOCOL_MAX_FILE_SIZE_BYTES)
     max_event_age_days = _int_or_default(max_event_age_raw, DEFAULT_LOGS_PROTOCOL_MAX_EVENT_AGE_DAYS)
     max_events_count = _int_or_default(max_events_count_raw, DEFAULT_LOGS_PROTOCOL_MAX_EVENTS_COUNT)
+    if max_file_size_raw is not None and not isinstance(max_file_size_raw, int):
+        try:
+            int(str(max_file_size_raw).strip())
+        except (TypeError, ValueError):
+            validation_errors.append("logs.protocol.max_file_size_bytes must be an integer")
+    if max_event_age_raw is not None and not isinstance(max_event_age_raw, int):
+        try:
+            int(str(max_event_age_raw).strip())
+        except (TypeError, ValueError):
+            validation_errors.append("logs.protocol.max_event_age_days must be an integer")
+    if max_events_count_raw is not None and not isinstance(max_events_count_raw, int):
+        try:
+            int(str(max_events_count_raw).strip())
+        except (TypeError, ValueError):
+            validation_errors.append("logs.protocol.max_events_count must be an integer")
+    if max_file_size_bytes < 1024 or max_file_size_bytes > 500_000_000:
+        validation_errors.append("logs.protocol.max_file_size_bytes must be within [1024, 500000000]")
+    if max_event_age_days < 1 or max_event_age_days > 36500:
+        validation_errors.append("logs.protocol.max_event_age_days must be within [1, 36500]")
+    if max_events_count < 100 or max_events_count > 5_000_000:
+        validation_errors.append("logs.protocol.max_events_count must be within [100, 5000000]")
     if max_file_size_bytes < 1024:
         max_file_size_bytes = 1024
+    if max_file_size_bytes > 500_000_000:
+        max_file_size_bytes = 500_000_000
     if max_event_age_days < 1:
         max_event_age_days = 1
+    if max_event_age_days > 36500:
+        max_event_age_days = 36500
     if max_events_count < 100:
         max_events_count = 100
+    if max_events_count > 5_000_000:
+        max_events_count = 5_000_000
     allow_full_prompt_until = _parse_iso_utc(allow_prompt_raw)
+    if allow_prompt_raw is not None and allow_full_prompt_until is None:
+        validation_errors.append("logs.protocol.allow_full_prompt_until must be an ISO-8601 timestamp")
 
     return ResolvedProtocolLogConfig(
         max_file_size_bytes=max_file_size_bytes,
@@ -882,4 +915,5 @@ def resolve_protocol_log_config(repo_root: Path) -> ResolvedProtocolLogConfig:
         max_events_count=max_events_count,
         allow_full_prompt_until=allow_full_prompt_until,
         source=source,
+        validation_errors=validation_errors,
     )

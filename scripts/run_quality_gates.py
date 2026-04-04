@@ -1803,6 +1803,62 @@ def gate_doctor_config_validate_provider_required_fields(repo_root: Path) -> Non
     )
 
 
+def gate_doctor_config_validate_logs_protocol_malformed(repo_root: Path) -> None:
+    forge_dir = repo_root / ".forge"
+    forge_dir.mkdir(parents=True, exist_ok=True)
+    (forge_dir / "config.toml").write_text(
+        (
+            "[logs.protocol]\n"
+            "max_file_size_bytes = 1\n"
+            "max_event_age_days = 0\n"
+            "max_events_count = -1\n"
+            'allow_full_prompt_until = "not-a-timestamp"\n'
+        ),
+        encoding="utf-8",
+    )
+    doctor = parse_json_output(
+        run_cmd(
+            ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "doctor"],
+            cwd=ROOT,
+        ).stdout
+    )
+    cfg_validate = parse_json_output(
+        run_cmd(
+            ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "config", "validate"],
+            cwd=ROOT,
+        ).stdout
+    )
+    doctor_checks = doctor.get("sections", {}).get("checks", [])
+    cfg_checks = cfg_validate.get("sections", {}).get("checks", [])
+    doctor_validation = [item for item in doctor_checks if isinstance(item, dict) and item.get("key") == "config_validation"]
+    cfg_validation = [item for item in cfg_checks if isinstance(item, dict) and item.get("key") == "config_validation"]
+    assert_true(
+        doctor_validation and doctor_validation[0].get("status") == "fail",
+        "doctor logs malformed: config_validation should fail",
+    )
+    assert_true(
+        cfg_validation and cfg_validation[0].get("status") == "fail",
+        "config validate logs malformed: config_validation should fail",
+    )
+    detail = str(doctor_validation[0].get("detail", ""))
+    assert_true(
+        "logs.protocol.max_file_size_bytes must be within [1024, 500000000]" in detail,
+        "doctor logs malformed: expected max_file_size_bytes range message",
+    )
+    assert_true(
+        "logs.protocol.max_event_age_days must be within [1, 36500]" in detail,
+        "doctor logs malformed: expected max_event_age_days range message",
+    )
+    assert_true(
+        "logs.protocol.max_events_count must be within [100, 5000000]" in detail,
+        "doctor logs malformed: expected max_events_count range message",
+    )
+    assert_true(
+        "logs.protocol.allow_full_prompt_until must be an ISO-8601 timestamp" in detail,
+        "doctor logs malformed: expected allow_full_prompt_until message",
+    )
+
+
 def gate_frontend_fixture(frontend_repo: Path) -> None:
     describe_payload = parse_json_output(
         run_cmd(
@@ -3098,6 +3154,7 @@ def run_all_gates() -> None:
         temp_repo_malformed = Path(temp_dir) / "repo-malformed"
         temp_repo_unknown_cfg = Path(temp_dir) / "repo-unknown-cfg"
         temp_repo_provider_required = Path(temp_dir) / "repo-provider-required"
+        temp_repo_logs_malformed = Path(temp_dir) / "repo-logs-malformed"
         temp_repo_protocol_local = Path(temp_dir) / "repo-protocol-local"
         temp_repo_promptfail = Path(temp_dir) / "repo-promptfail"
         temp_repo_rules = Path(temp_dir) / "repo-rules"
@@ -3108,6 +3165,7 @@ def run_all_gates() -> None:
         shutil.copytree(FIXTURE_MALFORMED_SRC, temp_repo_malformed)
         shutil.copytree(FIXTURE_BASIC_SRC, temp_repo_unknown_cfg)
         shutil.copytree(FIXTURE_BASIC_SRC, temp_repo_provider_required)
+        shutil.copytree(FIXTURE_BASIC_SRC, temp_repo_logs_malformed)
         shutil.copytree(FIXTURE_BASIC_SRC, temp_repo_protocol_local)
         shutil.copytree(FIXTURE_BASIC_SRC, temp_repo_promptfail)
         shutil.copytree(FIXTURE_BASIC_SRC, temp_repo_rules)
@@ -3152,6 +3210,7 @@ def run_all_gates() -> None:
         gate_doctor_config_validate_matrix_malformed(temp_repo_malformed)
         gate_doctor_config_validate_unknown_keys(temp_repo_unknown_cfg)
         gate_doctor_config_validate_provider_required_fields(temp_repo_provider_required)
+        gate_doctor_config_validate_logs_protocol_malformed(temp_repo_logs_malformed)
         gate_doctor_config_validate_read_only_sessions(temp_repo)
         gate_external_review_rules(temp_repo_rules)
         gate_external_review_rules_invalid(temp_repo_rules_invalid)
