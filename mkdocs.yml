@@ -1,0 +1,33 @@
+site_name: Forge - AI Repo Workbench
+site_description: Explicit AI for real repository work.
+site_url: https://example.github.io/forge-ai-repo-workbench/
+repo_url: https://github.com/example/forge-ai-repo-workbench
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+
+plugins:
+  - search
+  - i18n:
+      docs_structure: folder
+      default_language: en
+      languages:
+        - locale: en
+          name: English
+          build: true
+        - locale: de
+          name: Deutsch
+          build: true
+
+nav:
+  - Home: en/index.md
+  - Getting Started: en/getting-started.md
+  - Core Commands: en/core-commands.md
+  - Trust & Safety: en/trust-and-safety.md
+  - Runtime Settings & Sessions: en/runtime-settings-and-sessions.md
+  - LLM Setup: en/llm-setup.md
+  - Troubleshooting: en/troubleshooting.md
+  - FAQ: en/faq.md

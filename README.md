@@ -390,6 +390,7 @@ The current repository state reflects a broad implemented feature base, includin
 
 - Product direction and principles: [AGENTS.md](AGENTS.md)
 - Project roadmap: [docs/roadmap.md](docs/roadmap.md)
+- User docs (DE/EN): [docs/user/README.md](docs/user/README.md)
 - Feature status index: [docs/status/features-index.md](docs/status/features-index.md)
 - Issue status index: [docs/status/issues-index.md](docs/status/issues-index.md)
 - Feature specs: [docs/features](docs/features)

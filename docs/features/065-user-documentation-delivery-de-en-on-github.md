@@ -164,3 +164,34 @@ Language model:
 - GitHub Wiki is valid for long-form docs but has indexing/scale caveats and is less suitable as primary product docs.
 - Docusaurus provides native i18n workflows suitable for bilingual docs.
 - MkDocs + Material is strong for docs UX; `mkdocs-static-i18n` provides multilingual docs builds.
+
+## Implemented Behavior (Current)
+
+- A repository-native DE/EN user-docs surface is now available under `docs/user/`.
+- Language entry points are provided via:
+  - `docs/user/en/index.md`
+  - `docs/user/de/index.md`
+- Core user sections now exist in both locales:
+  - Getting Started
+  - Installation
+  - Core Commands
+  - Trust & Safety
+  - Runtime Settings & Sessions
+  - LLM Setup
+  - Recipes
+  - Troubleshooting
+  - FAQ
+- A contribution workflow with DE/EN parity checklist is documented in `docs/user/CONTRIBUTING.md`.
+- Main README links to the user-docs entry point.
+
+## How To Validate Quickly
+
+1. Open `docs/user/README.md` and verify DE/EN entry links.
+2. Confirm each required page exists in both `docs/user/en/` and `docs/user/de/`.
+3. Verify contribution checklist exists in `docs/user/CONTRIBUTING.md`.
+4. Verify top-level README contains a link to `docs/user/README.md`.
+
+## Known Limits / Notes
+
+- This feature delivers the bilingual content foundation in-repository.
+- GitHub Pages generator/deployment automation is handled in Feature 066.

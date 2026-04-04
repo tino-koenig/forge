@@ -633,6 +633,20 @@ implemented_on = "2026-04-04"
 notes = "README v2 now presents outcome-first onboarding, trust/safety policy matrix, explicit control surfaces, and LLM deployment positioning."
 
 [[feature]]
+id = "065"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Added bilingual repository-native user documentation surface under docs/user with EN/DE parity pages and contribution workflow."
+
+[[feature]]
+id = "066"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Added MkDocs Material DE/EN docs MVP with Pages workflow, parity check, and bilingual landing/core pages."
+
+[[feature]]
 id = "069"
 status = "implemented"
 defined_on = "2026-04-04"

@@ -107,3 +107,34 @@ To keep future migration low-risk:
 - DE/EN core pages are available and navigable
 - contributor workflow for docs updates is documented
 - migration path to Docusaurus remains open and low-friction
+
+## Implemented Behavior (Current)
+
+- Added MkDocs MVP configuration via `mkdocs.yml` using Material theme and static i18n plugin.
+- Added bilingual docs structure for site-facing pages under:
+  - `docs/en/*`
+  - `docs/de/*`
+- Added DE/EN MVP pages:
+  - `index`, `getting-started`, `core-commands`, `trust-and-safety`,
+    `runtime-settings-and-sessions`, `llm-setup`, `troubleshooting`, `faq`.
+- Added locale parity check script:
+  - `scripts/check-docs-locale-parity.sh`
+- Added GitHub Pages workflow for build/deploy and PR validation:
+  - `.github/workflows/docs-pages.yml`
+  - PR: locale parity + `mkdocs build --strict`
+  - main push: upload artifact + deploy to Pages
+
+## How To Validate Quickly
+
+1. Run locale parity check:
+   - `./scripts/check-docs-locale-parity.sh`
+2. Validate MkDocs config locally (with dependencies installed):
+   - `mkdocs build --strict`
+3. Verify workflow file contains:
+   - PR build checks
+   - main-branch Pages deploy
+
+## Known Limits / Notes
+
+- Local mkdocs build requires installing docs dependencies (`mkdocs-material`, `mkdocs-static-i18n`).
+- This MVP focuses on foundation and parity; advanced theming/versioning/search tuning is intentionally out of scope.

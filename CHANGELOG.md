@@ -39,7 +39,9 @@ All notable changes to Forge should be documented in this file.
 - feature 057: added reusable LLM foundation (`core/llm_foundation.py`) with shared policy/settings/prompt/provider/run-step APIs and integrated delegation from `core/llm_integration.py`
 
 ### Changed
+- feature 066: added MkDocs Material docs MVP with DE/EN landing/core pages, locale parity check script, and GitHub Pages build/deploy workflow
 - issue 5: quality-gate runner now supports focused `--only` execution (repeat/comma forms), keeps default full-suite behavior unchanged, and fails fast on unknown gate names with actionable diagnostics
+- issue 56: quality-gate runner now prepends repo root to `sys.path`, fixing CI/direct-invocation `ModuleNotFoundError: core`; quality-gates workflow also upgraded to `actions/checkout@v5` and `actions/setup-python@v6` to avoid Node.js 20 deprecation warnings
 - feature 069 / issue 10: `forge index` now persists graph-build failure warnings to `.forge/index.json` (`graph.warning`) so artifact metadata matches console graph-status output
 - feature 071 / issue 13: framework graph refs now enforce schema/version validation on load, exclude invalid refs from active usage, and expose per-ref validation warnings in query/explain `graph_usage`
 - feature 070 / issue 12: repo graph load now validates schema/version compatibility, rejects invalid payloads deterministically, and exposes graph validation state/warnings in query/explain graph_usage
