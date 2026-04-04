@@ -2453,6 +2453,68 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     else:
         llm_outcome = None
 
+    summary_llm_usage = (
+        llm_outcome.usage
+        if llm_outcome is not None
+        else {
+            "policy": "off",
+            "mode": llm_settings.mode,
+            "attempted": False,
+            "used": False,
+            "fallback_reason": "summary refinement disabled for json output",
+        }
+    )
+    planner_usage = (
+        planner.usage
+        if planner is not None
+        else {
+            "attempted": False,
+            "used": False,
+            "fallback_reason": "query planner not available",
+        }
+    )
+    orchestrator_usage = (
+        orchestration_usage
+        if isinstance(orchestration_usage, dict)
+        else {
+            "attempted": False,
+            "used": False,
+            "fallback_reason": "query action orchestrator not available",
+        }
+    )
+    stage_llm_used = any(
+        bool(item.get("used"))
+        for item in (summary_llm_usage, planner_usage, orchestrator_usage)
+        if isinstance(item, dict)
+    )
+    stage_llm_attempted = any(
+        bool(item.get("attempted"))
+        for item in (summary_llm_usage, planner_usage, orchestrator_usage)
+        if isinstance(item, dict)
+    )
+    llm_usage_summary = dict(summary_llm_usage)
+    llm_usage_summary["used"] = stage_llm_used
+    llm_usage_summary["attempted"] = stage_llm_attempted
+    llm_usage_summary["stage_usage"] = {
+        "summary_refinement": {
+            "attempted": bool(summary_llm_usage.get("attempted")),
+            "used": bool(summary_llm_usage.get("used")),
+            "fallback_reason": summary_llm_usage.get("fallback_reason"),
+        },
+        "query_planner": {
+            "attempted": bool(planner_usage.get("attempted")),
+            "used": bool(planner_usage.get("used")),
+            "fallback_reason": planner_usage.get("fallback_reason"),
+        },
+        "query_action_orchestrator": {
+            "attempted": bool(orchestrator_usage.get("attempted")),
+            "used": bool(orchestrator_usage.get("used")),
+            "fallback_reason": orchestrator_usage.get("fallback_reason"),
+        },
+    }
+    if stage_llm_used and not bool(summary_llm_usage.get("used")):
+        llm_usage_summary["fallback_reason"] = "summary refinement skipped; planner/orchestrator provided llm participation"
+
     sections: dict[str, object] = {
         "likely_locations": [
             {
@@ -2496,19 +2558,9 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             for candidate in candidates[:5]
             if str(candidate.path) in index_entry_map
         ],
-        "llm_usage": (
-            llm_outcome.usage
-            if llm_outcome is not None
-            else {
-                "policy": "off",
-                "mode": llm_settings.mode,
-                "attempted": False,
-                "used": False,
-                "fallback_reason": "summary refinement disabled for json output",
-            }
-        ),
+        "llm_usage": llm_usage_summary,
         "provenance": provenance_section(
-            llm_used=bool(llm_outcome.usage.get("used")) if llm_outcome is not None else False,
+            llm_used=stage_llm_used,
             evidence_count=len(evidence_payload),
         ),
         "framework_profile": {

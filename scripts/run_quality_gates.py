@@ -1966,6 +1966,69 @@ def gate_query_orchestrator_policy_settings(repo_root: Path) -> None:
     )
 
 
+def gate_query_llm_provenance_consistency(repo_root: Path) -> None:
+    payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--llm-provider",
+                "mock",
+                "--repo-root",
+                str(repo_root),
+                "query",
+                "compute_price",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    sections = payload.get("sections", {})
+    llm_usage = sections.get("llm_usage", {})
+    planner_usage = sections.get("query_planner", {}).get("usage", {})
+    orchestrator_usage = sections.get("action_orchestration", {}).get("usage", {})
+    stage_usage = llm_usage.get("stage_usage", {}) if isinstance(llm_usage, dict) else {}
+    summary_stage = stage_usage.get("summary_refinement", {}) if isinstance(stage_usage, dict) else {}
+    planner_stage = stage_usage.get("query_planner", {}) if isinstance(stage_usage, dict) else {}
+    orchestrator_stage = stage_usage.get("query_action_orchestrator", {}) if isinstance(stage_usage, dict) else {}
+    stage_used = any(
+        bool(item.get("used"))
+        for item in (summary_stage, planner_stage, orchestrator_stage)
+        if isinstance(item, dict)
+    )
+    stage_attempted = any(
+        bool(item.get("attempted"))
+        for item in (summary_stage, planner_stage, orchestrator_stage)
+        if isinstance(item, dict)
+    )
+    assert_true(bool(planner_usage), "query llm provenance: expected query_planner usage section")
+    assert_true(bool(orchestrator_usage), "query llm provenance: expected action_orchestration usage section")
+    assert_true(bool(llm_usage), "query llm provenance: expected top-level llm_usage section")
+    assert_true(
+        llm_usage.get("used") == stage_used,
+        "query llm provenance: top-level llm_usage.used must reflect aggregated stage usage",
+    )
+    assert_true(
+        llm_usage.get("attempted") == stage_attempted,
+        "query llm provenance: top-level llm_usage.attempted must reflect aggregated stage attempts",
+    )
+    assert_true(
+        planner_stage.get("used") == planner_usage.get("used"),
+        "query llm provenance: planner stage_usage.used must match query_planner.usage.used",
+    )
+    assert_true(
+        orchestrator_stage.get("used") == orchestrator_usage.get("used"),
+        "query llm provenance: orchestrator stage_usage.used must match action_orchestration.usage.used",
+    )
+    provenance = sections.get("provenance", {})
+    expected_inference = "deterministic_heuristics+llm" if stage_used else "deterministic_heuristics"
+    assert_true(
+        provenance.get("inference_source") == expected_inference,
+        "query llm provenance: provenance inference_source must match aggregated LLM participation",
+    )
+
+
 def gate_query_planner_success(repo_root: Path) -> None:
     payload = parse_json_output(
         run_cmd(
@@ -3973,6 +4036,7 @@ def run_all_gates() -> None:
         gate_query_index_scope_and_symbol_first(temp_repo)
         gate_central_mode_orchestrator_foundation(temp_repo)
         gate_query_orchestrator_policy_settings(temp_repo)
+        gate_query_llm_provenance_consistency(temp_repo)
         gate_query_planner_success(temp_repo)
         gate_query_planner_fallback(temp_repo)
         gate_llm_observability_redaction(temp_repo)

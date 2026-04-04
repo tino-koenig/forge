@@ -511,3 +511,10 @@ status = "implemented"
 defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Moved query orchestration progress and handler-cost coefficients to runtime settings with explicit source tracing."
+
+[[issue]]
+id = "6"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Top-level query llm_usage and provenance now aggregate stage-level planner/orchestrator/summary usage consistently."
