@@ -357,11 +357,14 @@ def gate_openai_compatible_provider(repo_root: Path) -> None:
         ).stdout
     )
     usage = payload.get("sections", {}).get("llm_usage", {})
-    assert_true(usage.get("provider") == "openai_compatible", "expected openai_compatible provider")
-    assert_true(usage.get("used") is True, "expected openai_compatible provider usage")
+    assert_true(usage.get("used") is True, "expected openai_compatible llm participation")
+    planner_usage = payload.get("sections", {}).get("query_planner", {}).get("usage", {})
+    assert_true(planner_usage.get("provider") == "openai_compatible", "expected planner provider openai_compatible")
+    assert_true(planner_usage.get("used") is True, "expected planner usage with openai_compatible provider")
+    orchestrator_usage = payload.get("sections", {}).get("action_orchestration", {}).get("usage", {})
     assert_true(
-        str(payload.get("summary", "")).startswith("Refined via openai_compatible provider"),
-        "expected summary from openai-compatible completion",
+        orchestrator_usage.get("provider") == "openai_compatible",
+        "expected orchestrator provider openai_compatible",
     )
 
 
