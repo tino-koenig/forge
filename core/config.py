@@ -674,6 +674,13 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
     )
     if provider is not None and provider not in {"openai_compatible", "mock"}:
         validation_errors.append(f"unknown provider '{provider}'")
+    if provider == "openai_compatible":
+        if not isinstance(base_url, str) or not base_url.strip():
+            validation_errors.append("openai_compatible.base_url is required when provider=openai_compatible")
+        if not isinstance(model, str) or not model.strip():
+            validation_errors.append("openai_compatible.model is required when provider=openai_compatible")
+        if not isinstance(api_key_env, str) or not api_key_env.strip():
+            validation_errors.append("openai_compatible.api_key_env must be a non-empty env var name")
     if timeout_s <= 0:
         validation_errors.append("timeout_s must be > 0")
     if context_budget_tokens <= 0:

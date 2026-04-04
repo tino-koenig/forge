@@ -39,6 +39,7 @@ All notable changes to Forge should be documented in this file.
 - feature 057: added reusable LLM foundation (`core/llm_foundation.py`) with shared policy/settings/prompt/provider/run-step APIs and integrated delegation from `core/llm_integration.py`
 
 ### Changed
+- feature 104 / issue 45: `config_validation` schlaegt nun deterministisch fehl, wenn bei `provider=openai_compatible` Pflichtfelder (`base_url`, `model`) fehlen; `doctor` und `config validate` melden dies konsistent
 - feature 103 / issue 44: `config_validation` erkennt nun unbekannte Keys schema-basiert in `.forge/config.toml` und `.forge/config.local.toml` (inkl. Pfaddetail und Did-you-mean-Hinweis) und meldet diese konsistent in `doctor`/`config validate` als fail
 - feature 099 / issue 4: runtime diagnostics melden `scope_paths.session` jetzt konsistent zur effektiven session-herkunft (env, named oder merged)
 - feature 098 / issue 3: `forge set --scope repo|user` bewahrt unbekannte runtime-keys/tabellen nun beim schreiben statt destruktivem rewrite
