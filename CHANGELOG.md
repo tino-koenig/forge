@@ -39,6 +39,7 @@ All notable changes to Forge should be documented in this file.
 - feature 057: added reusable LLM foundation (`core/llm_foundation.py`) with shared policy/settings/prompt/provider/run-step APIs and integrated delegation from `core/llm_integration.py`
 
 ### Changed
+- feature 091 / issue 34: review regressions now run through dedicated quality-gate matrix covering path/symbol/file target resolution, related-target noise filtering, orchestrator trace, and external-rule interactions
 - feature 090 / issue 33: review now emits central orchestrator trace metadata (`action_orchestration`) via shared mode-orchestrator engine with dedicated regression coverage
 - feature 089 / issue 32: review/explain use shared weighted related-target ranking (imports/locality/index + lexical fallback) and now expose relation rationale metadata in output contracts
 - feature 088 / issue 31: review heuristic policy thresholds/caps moved to runtime settings with source-traceable `sections.review_policy` and dedicated regression gate

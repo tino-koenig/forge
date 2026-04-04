@@ -26,3 +26,26 @@ Current review gates cover baseline findings and external rules, but miss critic
 ## Linked Features
 
 - [Feature 091 - Review Quality Gate Matrix Extension](/Users/tino/PhpstormProjects/forge/docs/features/091-review-quality-gate-matrix-extension.md)
+
+## Implemented Behavior (Current)
+
+- Review regression coverage now includes a dedicated matrix gate (`gate_review_quality_gate_matrix`).
+- The matrix enforces critical review invariants:
+  - unresolved path-like targets do not fallback to symbols
+  - symbol-like targets still resolve via symbol fallback
+  - existing path-like targets resolve as file targets
+  - related-target retrieval filters noisy lexical collisions
+  - review orchestrator trace contract remains intact
+  - external review rules (valid/invalid) remain covered
+- Matrix is wired into standard quality-gate execution.
+
+## How To Validate Quickly
+
+- Run:
+  - `python3 scripts/run_quality_gates.py`
+- Verify:
+  - `gate_review_quality_gate_matrix` passes.
+
+## Known Limits / Notes
+
+- Matrix coverage is deterministic and fixture-based; it complements broader end-to-end smoke coverage.

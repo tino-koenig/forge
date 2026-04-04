@@ -3098,6 +3098,25 @@ def gate_review_path_like_target_resolution_contract(repo_root: Path) -> None:
         symbol_like.get("sections", {}).get("target_source") == "symbol",
         "review path-like: symbol-like payload should still use symbol fallback",
     )
+    file_like = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "review",
+                "src/controller.py",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    assert_true(
+        file_like.get("sections", {}).get("target_source") == "file",
+        "review path-like: existing path-like payload should resolve as file target",
+    )
 
 
 def gate_review_runtime_policy_settings(repo_root: Path) -> None:
@@ -4631,6 +4650,15 @@ def gate_review_central_orchestrator_adoption(repo_root: Path) -> None:
         assert_true(expected in action_names, f"review orchestrator: missing expected action '{expected}'")
 
 
+def gate_review_quality_gate_matrix(repo_root: Path, repo_rules: Path, repo_rules_invalid: Path) -> None:
+    gate_review_path_like_target_resolution_contract(repo_root)
+    gate_review_runtime_policy_settings(repo_root)
+    gate_related_target_retrieval_foundation(repo_root)
+    gate_review_central_orchestrator_adoption(repo_root)
+    gate_external_review_rules(repo_rules)
+    gate_external_review_rules_invalid(repo_rules_invalid)
+
+
 def gate_mode_capability_contract_query_read_only(repo_root: Path) -> None:
     before = snapshot_repo_files(repo_root)
     payload = parse_json_output(
@@ -5240,11 +5268,7 @@ def run_all_gates() -> None:
         gate_logs_capability_filter_choices_from_model()
         gate_protocol_analytics_foundation_unit()
         gate_init_parser_choices_from_registry()
-        gate_external_review_rules(temp_repo_rules)
-        gate_external_review_rules_invalid(temp_repo_rules_invalid)
-        gate_review_path_like_target_resolution_contract(temp_repo)
-        gate_review_runtime_policy_settings(temp_repo)
-        gate_related_target_retrieval_foundation(temp_repo)
+        gate_review_quality_gate_matrix(temp_repo, temp_repo_rules, temp_repo_rules_invalid)
         gate_from_run_references(temp_repo)
         gate_run_history_contract_always_persisted(temp_repo)
         gate_protocol_log_storage_jsonl(temp_repo)

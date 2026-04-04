@@ -560,6 +560,13 @@ defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Review now exposes central orchestrator trace/runtime metadata under action_orchestration using the shared mode orchestrator engine."
 
+[[feature]]
+id = "091"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Added integrated review quality-gate matrix covering target-resolution, noise-control, orchestrator trace, and rule-interaction regressions."
+
 # Issue examples:
 # [[issue]]
 # id = "12"
@@ -728,6 +735,13 @@ status = "implemented"
 defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Review now surfaces shared central orchestrator trace/runtime metadata with dedicated regression gate coverage."
+
+[[issue]]
+id = "34"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Review regression suite now includes a dedicated quality-gate matrix for target resolution and noise-sensitive scenarios."
 
 [[issue]]
 id = "6"
