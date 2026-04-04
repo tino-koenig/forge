@@ -66,7 +66,13 @@ Status values:
 | 054 | Ask Mode with User-Friendly Source Presets | 2026-04-04 | implemented | 2026-04-04 | [054-ask-mode-user-friendly-source-presets.md](/Users/tino/PhpstormProjects/forge/docs/features/054-ask-mode-user-friendly-source-presets.md) |
 | 055 | Web Search Foundation | 2026-04-04 | implemented | 2026-04-04 | [055-web-search-foundation.md](/Users/tino/PhpstormProjects/forge/docs/features/055-web-search-foundation.md) |
 | 056 | Web Retrieval Foundation | 2026-04-04 | implemented | 2026-04-04 | [056-web-retrieval-foundation.md](/Users/tino/PhpstormProjects/forge/docs/features/056-web-retrieval-foundation.md) |
-| 057 | LLM Foundation | 2026-04-04 | defined | - | [057-llm-foundation.md](/Users/tino/PhpstormProjects/forge/docs/features/057-llm-foundation.md) |
+| 057 | LLM Foundation | 2026-04-04 | implemented | 2026-04-04 | [057-llm-foundation.md](/Users/tino/PhpstormProjects/forge/docs/features/057-llm-foundation.md) |
+| 058 | Explain Facet Alias Routing | 2026-04-04 | implemented | 2026-04-04 | [058-explain-facet-alias-routing.md](/Users/tino/PhpstormProjects/forge/docs/features/058-explain-facet-alias-routing.md) |
+| 059 | Explain Settings and Defaults Facets | 2026-04-04 | implemented | 2026-04-04 | [059-explain-settings-and-defaults-facets.md](/Users/tino/PhpstormProjects/forge/docs/features/059-explain-settings-and-defaults-facets.md) |
+| 060 | Explain LLM and Output Facets | 2026-04-04 | implemented | 2026-04-04 | [060-explain-llm-and-output-facets.md](/Users/tino/PhpstormProjects/forge/docs/features/060-explain-llm-and-output-facets.md) |
+| 061 | Runtime Settings via `forge set/get` | unknown | defined | - | [061-runtime-settings-set-get.md](/Users/tino/PhpstormProjects/forge/docs/features/061-runtime-settings-set-get.md) |
+| 062 | Runtime Settings Foundation: Registry, Resolver, Source Tracing | unknown | defined | - | [062-runtime-settings-foundation-registry-resolver.md](/Users/tino/PhpstormProjects/forge/docs/features/062-runtime-settings-foundation-registry-resolver.md) |
+| 063 | Named Session Context with Auto-Create and TTL | unknown | defined | - | [063-named-session-context-and-ttl.md](/Users/tino/PhpstormProjects/forge/docs/features/063-named-session-context-and-ttl.md) |
 
 ## Notes
 - 001: Core CLI and capability model implemented.
@@ -93,3 +99,7 @@ Status values:
 - 054: Added ask UX entrypoints (ask, ask:repo/docs/latest) as dedicated free-question LLM mode (not repository file search), with explicit preset metadata and staged warnings for latest/guided behavior.
 - 055: Added reusable web-search foundation with allowlist policy, bounded URL discovery, normalized candidate output, and ask docs/latest integration via sections.ask.search.
 - 056: Added reusable web-retrieval foundation with bounded host-allowlisted fetch/snippet extraction and ask docs/latest integration via sections.ask.retrieval.
+- 057: Added reusable LLM foundation APIs (policy/settings/prompt/complete/run_llm_step) and integrated llm_integration delegation for consistent fallback/usage metadata.
+- 058: Added explain facet alias routing (`explain:<facet>`) with `--focus` parity, deterministic alias/flag conflict validation, and explain focus provenance fields in contracts.
+- 059: Implemented explain `settings` and `defaults` facets with deterministic direct answers plus structured `settings_influences` and `default_values` evidence sections.
+- 060: Implemented explain `llm` and `outputs` facets with deterministic direct answers plus structured `llm_participation` and `output_surfaces` sections.

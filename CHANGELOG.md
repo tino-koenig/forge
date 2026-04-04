@@ -30,9 +30,15 @@ All notable changes to Forge should be documented in this file.
 - feature 054: added dedicated free-question `ask` mode (`ask`, `ask:repo`, `ask:docs`, `ask:latest`) with compact default output, explicit ask metadata in contract, and staged warnings for `ask:latest`/`--guided`
 - feature 055: added reusable web-search foundation with host allowlist policy, bounded candidate discovery/ranking, and `ask:docs`/`ask:latest` integration via `sections.ask.search`
 - feature 056: added reusable web-retrieval foundation with bounded host-allowlisted fetch/snippet extraction and `ask:docs`/`ask:latest` integration via `sections.ask.retrieval`
+- feature 057: added reusable LLM foundation (`core/llm_foundation.py`) with shared policy/settings/prompt/provider/run-step APIs and integrated delegation from `core/llm_integration.py`
 
 ### Changed
 - issue 1: contributor guidance now requires changelog entries with feature/issue reference for each change
+- feature 002: `forge index` now reports entry delta counts (`new_entries`, `updated_entries`) in CLI output and persists structured delta metadata in `.forge/index.json`
+- feature 021: explain now derives deterministic behavior signals from target content (guards, file I/O, serialization, redaction, log-path anchors) and includes them in summary/full view/JSON
+- feature 058: added explain facet alias routing (`explain:<facet>`) plus `--focus` option with deterministic conflict validation and explain focus provenance in output contracts
+- feature 059: implemented `explain:settings` and `explain:defaults` facets with deterministic direct answers plus structured `settings_influences`/`default_values` evidence sections in text and JSON
+- feature 060: implemented `explain:llm` and `explain:outputs` facets with deterministic direct answers plus structured `llm_participation`/`output_surfaces` sections in text and JSON
 - feature 041: console entrypoint import now uses `forge_cmd.cli` (renamed from `cmd.cli`) to avoid stdlib `cmd` module collision in installed environments
 - issue 2: fixed installed `forge` entrypoint import failure (`cmd` stdlib collision) by renaming internal package from `cmd` to `forge_cmd`
 - feature 046: query search term pipeline now prioritizes symbol-like/code-variant terms, suppresses weak generic terms by default (including `where` outside SQL-like context), and applies weighted evidence scoring for content/path/symbol/summary retrieval

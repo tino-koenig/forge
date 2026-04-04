@@ -299,6 +299,10 @@ JSON is sufficient for the first phase.
 - Implementation status: implemented.
 - Traceability: `CHANGELOG.md` references feature 002; status and notes are indexed in `docs/status/features-index.md`.
 - This addendum summarizes runtime availability; the normative intent remains in the spec sections above.
+- `forge index` now reports index-entry delta counts in command output:
+  - `new_entries`
+  - `updated_entries`
+- `.forge/index.json` now persists structured delta metadata under `delta` (including `new_entries` and `updated_entries`).
 
 ## How To Validate Quickly
 

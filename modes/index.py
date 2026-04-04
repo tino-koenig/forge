@@ -86,6 +86,29 @@ def load_existing_index(repo_root: Path) -> dict[str, object] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def _existing_entry_map(existing_index: dict[str, object] | None) -> dict[tuple[str, str], dict[str, object]]:
+    if not isinstance(existing_index, dict):
+        return {}
+    entries = existing_index.get("entries")
+    if not isinstance(entries, dict):
+        return {}
+
+    mapping: dict[tuple[str, str], dict[str, object]] = {}
+    for bucket in ("files", "directories"):
+        raw_items = entries.get(bucket)
+        if not isinstance(raw_items, list):
+            continue
+        for item in raw_items:
+            if not isinstance(item, dict):
+                continue
+            kind = item.get("kind")
+            path = item.get("path")
+            if not isinstance(kind, str) or not isinstance(path, str):
+                continue
+            mapping[(kind, path)] = item
+    return mapping
+
+
 def load_index_enrichment_config(repo_root: Path) -> tuple[bool, int, int]:
     config_path = repo_root / ".forge" / "config.toml"
     enabled = True
@@ -246,6 +269,7 @@ def build_index(repo_root: Path, request: CommandRequest, session: ExecutionSess
         if isinstance(existing_index, dict)
         else []
     )
+    existing_entry_map = _existing_entry_map(existing_index)
     existing_by_path: dict[str, dict[str, object]] = {}
     if isinstance(existing_files, list):
         for item in existing_files:
@@ -292,6 +316,26 @@ def build_index(repo_root: Path, request: CommandRequest, session: ExecutionSess
                     )
                 )
 
+    new_entries = 0
+    updated_entries = 0
+    unchanged_entries = 0
+    current_keys: set[tuple[str, str]] = set()
+    for entry in [*directories, *files]:
+        kind = entry.get("kind")
+        path = entry.get("path")
+        if not isinstance(kind, str) or not isinstance(path, str):
+            continue
+        key = (kind, path)
+        current_keys.add(key)
+        existing = existing_entry_map.get(key)
+        if existing is None:
+            new_entries += 1
+        elif existing != entry:
+            updated_entries += 1
+        else:
+            unchanged_entries += 1
+    removed_entries = len(set(existing_entry_map.keys()) - current_keys)
+
     return {
         "version": 1,
         "capability": request.capability.value,
@@ -304,6 +348,12 @@ def build_index(repo_root: Path, request: CommandRequest, session: ExecutionSess
         "counts": {
             "directories": len(directories),
             "files": len(files),
+        },
+        "delta": {
+            "new_entries": new_entries,
+            "updated_entries": updated_entries,
+            "unchanged_entries": unchanged_entries,
+            "removed_entries": removed_entries,
         },
         "enrichment": {
             "enabled": enrichment_enabled,
@@ -336,6 +386,13 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         "Indexed entries: "
         f"{data['counts']['directories']} directories, {data['counts']['files']} files"
     )
+    delta = data.get("delta", {})
+    if isinstance(delta, dict):
+        print(
+            "Index delta: "
+            f"{delta.get('new_entries', 0)} new entries, "
+            f"{delta.get('updated_entries', 0)} updated entries"
+        )
     enrichment = data.get("enrichment", {})
     if isinstance(enrichment, dict):
         print(

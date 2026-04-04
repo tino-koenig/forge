@@ -29,6 +29,15 @@ REQUIRES_PAYLOAD = {
     "ask:repo": True,
     "ask:docs": True,
     "ask:latest": True,
+    "explain:overview": True,
+    "explain:symbols": True,
+    "explain:dependencies": True,
+    "explain:resources": True,
+    "explain:uses": True,
+    "explain:settings": True,
+    "explain:defaults": True,
+    "explain:llm": True,
+    "explain:outputs": True,
 }
 
 
@@ -330,22 +339,53 @@ def build_parser() -> argparse.ArgumentParser:
         help="Question; optional profile prefix: simple|standard|detailed",
     )
 
+    def _add_explain_arguments(p: argparse.ArgumentParser) -> None:
+        p.add_argument(
+            "--focus",
+            choices=(
+                "overview",
+                "symbols",
+                "dependencies",
+                "resources",
+                "uses",
+                "settings",
+                "defaults",
+                "llm",
+                "outputs",
+            ),
+            help="Explain focus facet (optional).",
+        )
+        p.add_argument(
+            "--from-run",
+            type=int,
+            help="Resolve explain target from a previous run id",
+        )
+        p.add_argument(
+            "--confirm-transition",
+            action="store_true",
+            help="Explicitly confirm mode transition when using --from-run and transition policy requires it",
+        )
+        p.add_argument(
+            "parts",
+            nargs="*",
+            help="Target; optional profile prefix: simple|standard|detailed (or use --from-run)",
+        )
+
     explain_parser = subparsers.add_parser("explain", help="Run explain capability")
-    explain_parser.add_argument(
-        "--from-run",
-        type=int,
-        help="Resolve explain target from a previous run id",
-    )
-    explain_parser.add_argument(
-        "--confirm-transition",
-        action="store_true",
-        help="Explicitly confirm mode transition when using --from-run and transition policy requires it",
-    )
-    explain_parser.add_argument(
-        "parts",
-        nargs="*",
-        help="Target; optional profile prefix: simple|standard|detailed (or use --from-run)",
-    )
+    _add_explain_arguments(explain_parser)
+    for alias in (
+        "explain:overview",
+        "explain:symbols",
+        "explain:dependencies",
+        "explain:resources",
+        "explain:uses",
+        "explain:settings",
+        "explain:defaults",
+        "explain:llm",
+        "explain:outputs",
+    ):
+        alias_parser = subparsers.add_parser(alias, help=f"Run explain with facet alias '{alias.split(':', 1)[1]}'")
+        _add_explain_arguments(alias_parser)
 
     review_parser = subparsers.add_parser("review", help="Run review capability")
     review_parser.add_argument(
@@ -424,6 +464,17 @@ def main(argv: list[str] | None = None) -> int:
         "ask:docs": "docs",
         "ask:latest": "latest",
     }
+    explain_focus_map = {
+        "explain:overview": "overview",
+        "explain:symbols": "symbols",
+        "explain:dependencies": "dependencies",
+        "explain:resources": "resources",
+        "explain:uses": "uses",
+        "explain:settings": "settings",
+        "explain:defaults": "defaults",
+        "explain:llm": "llm",
+        "explain:outputs": "outputs",
+    }
     requested_capability = capability_name
     if capability_name in ask_preset_map:
         capability_name = "ask"
@@ -440,6 +491,28 @@ def main(argv: list[str] | None = None) -> int:
         args.ask_mode = False
         args.ask_command = None
         args.ask_guided = False
+    if requested_capability in explain_focus_map:
+        alias_focus = explain_focus_map[requested_capability]
+        explicit_focus = getattr(args, "focus", None)
+        if explicit_focus and explicit_focus != alias_focus:
+            parser.error(
+                f"Conflicting explain focus: alias '{requested_capability}' implies '{alias_focus}' "
+                f"but --focus was '{explicit_focus}'."
+            )
+            return 2
+        capability_name = "explain"
+        args.explain_focus = alias_focus
+        args.explain_focus_source = "alias"
+        args.explain_command = requested_capability
+    elif capability_name == "explain":
+        explicit_focus = getattr(args, "focus", None)
+        args.explain_focus = explicit_focus or "overview"
+        args.explain_focus_source = "flag" if explicit_focus else "default"
+        args.explain_command = "explain"
+    else:
+        args.explain_focus = None
+        args.explain_focus_source = None
+        args.explain_command = None
     if args.capability == "config":
         if getattr(args, "config_command", None) != "validate":
             parser.error("Unsupported config command. Use: forge config validate")

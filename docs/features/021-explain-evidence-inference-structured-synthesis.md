@@ -99,6 +99,9 @@ Separating evidence from inference makes LLM value visible and safer.
 - Implementation status: implemented.
 - Traceability: `CHANGELOG.md` references feature 021; status and notes are indexed in `docs/status/features-index.md`.
 - This addendum summarizes runtime availability; the normative intent remains in the spec sections above.
+- Explain now emits deterministic `behavior_signals` (derived from visible content markers such as guards, file writes, JSON serialization, and redaction lines).
+- Full text view includes a dedicated `Behavior Signals` block.
+- Deterministic summary seed now includes concise behavior hints (especially for symbol targets) before optional LLM refinement.
 
 ## How To Validate Quickly
 

@@ -105,3 +105,37 @@ This foundation is a prerequisite for:
 - ask web-assisted synthesis flows
 - future edit/fix foundations requiring LLM planning or patch reasoning
 - consistent multi-step orchestration across capabilities
+
+## Implemented Behavior (Current)
+
+- Added reusable LLM foundation module:
+  - `core/llm_foundation.py`
+  - shared APIs:
+    - `resolve_settings(...)`
+    - `render_prompt(...)`
+    - `complete(...)`
+    - `run_llm_step(...)`
+    - `policy_for(...)`
+- Centralized in foundation:
+  - capability/profile invocation policy matrix
+  - prompt-profile and system-template default/allowlist handling
+  - provider execution for `mock` and `openai_compatible`
+  - deterministic fallback reasons in normalized usage metadata
+- Integration:
+  - `core/llm_integration.py` now delegates policy/settings/prompt/provider behavior to foundation APIs
+  - `maybe_refine_summary(...)` consumes foundation `run_llm_step(...)` and keeps mode-specific query guardrails in integration layer
+  - query planner/orchestrator provider calls use shared foundation completion path via integration wrappers
+
+## How To Validate Quickly
+
+- Syntax:
+  - `PYTHONPYCACHEPREFIX=/tmp/pycache-forge python3 -m py_compile core/llm_foundation.py core/llm_integration.py`
+- Ask contract (LLM foundation usage visible in `sections.llm_usage`):
+  - `forge --output-format json ask \"Kurze Frage\"`
+- Query full view (planner/orchestrator + summary refinement still functional):
+  - `forge --view full query \"Wo ist der Prompt für explain definiert?\"`
+
+## Known Limits / Notes
+
+- `run_llm_step(...)` is foundation-level and mode-agnostic; strict query-summary preservation checks remain mode-specific in `llm_integration`.
+- Provider/network failures still fall back deterministically and are exposed via `fallback_reason`.

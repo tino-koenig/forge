@@ -305,6 +305,13 @@ implemented_on = "2026-04-04"
 notes = "Added reusable web-retrieval foundation with bounded host-allowlisted fetch/snippet extraction and ask docs/latest integration via sections.ask.retrieval."
 
 [[feature]]
+id = "057"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Added reusable LLM foundation APIs (policy/settings/prompt/complete/run_llm_step) and integrated llm_integration delegation for consistent fallback/usage metadata."
+
+[[feature]]
 id = "045"
 status = "implemented"
 defined_on = "2026-04-03"
