@@ -18,6 +18,7 @@ from core.analysis_primitives import (
 from core.capability_model import CommandRequest, Profile
 from core.effects import ExecutionSession
 from core.llm_integration import maybe_refine_summary, provenance_section, resolve_settings
+from core.mode_orchestrator import iter_bounded_cycles
 from core.output_contracts import build_contract, emit_contract_json
 from core.output_views import is_compact, is_full, resolve_view
 from core.review_rules import ReviewRule, load_review_rules
@@ -422,12 +423,22 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         print(f"Run reference error: {exc}")
         return 1
     request = CommandRequest(capability=request.capability, profile=request.profile, payload=resolved_payload)
+    orchestration_catalog = ["resolve_target", "detect", "expand_related", "aggregate", "summarize", "finalize"]
+    orchestration_actions: list[dict[str, object]] = []
+
+    def mark_action(name: str, status: str, detail: str) -> None:
+        orchestration_actions.append({"action": name, "status": status, "detail": detail})
+
     path_like_target = is_path_like_target(request.payload)
     target = (
         resolve_file_target(repo_root, request.payload, session)
         if path_like_target
         else resolve_file_or_symbol_target(repo_root, request.payload, session)
     )
+    if target is None:
+        mark_action("resolve_target", "failed", "target could not be resolved")
+    else:
+        mark_action("resolve_target", "completed", f"resolved to {target.path.relative_to(repo_root)} ({target.source})")
     external_rules, rule_errors = load_review_rules(repo_root)
     path_classes: dict[str, str] = {}
     is_json = args.output_format == "json"
@@ -535,6 +546,16 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                 "related_targets": [],
                 "review_policy": review_policy_section,
                 "review_rules": {"loaded": len(external_rules), "errors": rule_errors},
+                "action_orchestration": {
+                    "catalog": orchestration_catalog,
+                    "iterations": [{"iteration": 1, "actions": orchestration_actions}],
+                    "done_reason": "unresolved_target",
+                    "usage": {
+                        "engine": "core.mode_orchestrator.iter_bounded_cycles",
+                        "max_iterations": 1,
+                        "max_wall_time_ms": 1200,
+                    },
+                },
             },
         )
         if is_json:
@@ -551,40 +572,52 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         print(next_step)
         return 0
 
-    primary_findings = review_target(target, request.profile, external_rules, review_policy)
-    all_findings = list(primary_findings)
     related_count = 0
     related_target_meta: list[dict[str, object]] = []
+    capped_findings: list[Finding] = []
+    cycle = next(iter_bounded_cycles(max_iterations=1, max_wall_time_ms=1200))
+    orchestration_done_reason = "completed"
+    if cycle.wall_time_exhausted:
+        orchestration_done_reason = "wall_time_exhausted"
+        mark_action("detect", "skipped", "orchestration wall time exhausted before detection")
+    else:
+        primary_findings = review_target(target, request.profile, external_rules, review_policy)
+        mark_action("detect", "completed", f"primary findings={len(primary_findings)}")
+        all_findings = list(primary_findings)
 
-    if request.profile in {Profile.STANDARD, Profile.DETAILED}:
-        related_limit = 1 if request.profile == Profile.STANDARD else 3
-        related_limit = min(related_limit, review_policy.related_max_targets)
-        related_targets, related_ranked = gather_related_targets(
-            repo_root,
-            target,
-            session,
-            limit=related_limit,
-            path_classes=path_classes,
+        if request.profile in {Profile.STANDARD, Profile.DETAILED}:
+            related_limit = 1 if request.profile == Profile.STANDARD else 3
+            related_limit = min(related_limit, review_policy.related_max_targets)
+            related_targets, related_ranked = gather_related_targets(
+                repo_root,
+                target,
+                session,
+                limit=related_limit,
+                path_classes=path_classes,
+            )
+            related_count = len(related_targets)
+            related_target_meta = [
+                {
+                    "path": str(item.path),
+                    "score": item.score,
+                    "rationale": item.rationale,
+                }
+                for item in related_ranked
+            ]
+            mark_action("expand_related", "completed", f"related targets={related_count}")
+            for related in related_targets:
+                all_findings.extend(review_target(related, request.profile, external_rules, review_policy))
+        else:
+            mark_action("expand_related", "skipped", "profile does not enable related-target expansion")
+
+        all_findings.sort(
+            key=lambda f: (SEVERITY_ORDER.get(f.severity, 0), len(f.evidence)),
+            reverse=True,
         )
-        related_count = len(related_targets)
-        related_target_meta = [
-            {
-                "path": str(item.path),
-                "score": item.score,
-                "rationale": item.rationale,
-            }
-            for item in related_ranked
-        ]
-        for related in related_targets:
-            all_findings.extend(review_target(related, request.profile, external_rules, review_policy))
-
-    all_findings.sort(
-        key=lambda f: (SEVERITY_ORDER.get(f.severity, 0), len(f.evidence)),
-        reverse=True,
-    )
-    profile_max_findings = 6 if request.profile == Profile.SIMPLE else 10 if request.profile == Profile.STANDARD else 15
-    max_findings = min(profile_max_findings, review_policy.findings_max_items)
-    capped_findings = all_findings[:max_findings]
+        profile_max_findings = 6 if request.profile == Profile.SIMPLE else 10 if request.profile == Profile.STANDARD else 15
+        max_findings = min(profile_max_findings, review_policy.findings_max_items)
+        capped_findings = all_findings[:max_findings]
+        mark_action("aggregate", "completed", f"retained findings={len(capped_findings)}")
     uncertainty = [
         "Review findings are heuristic and may miss context outside scanned files.",
     ]
@@ -631,7 +664,9 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         repo_root=repo_root,
     )
     summary = llm_outcome.summary
+    mark_action("summarize", "completed", "applied deterministic+llm summary step")
     uncertainty.extend(llm_outcome.uncertainty_notes)
+    mark_action("finalize", "completed", "assembled final output contract")
     contract = build_contract(
         capability=request.capability.value,
         profile=request.profile.value,
@@ -645,6 +680,16 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             "related_targets": related_target_meta,
             "review_policy": review_policy_section,
             "review_rules": {"loaded": len(external_rules), "errors": rule_errors},
+            "action_orchestration": {
+                "catalog": orchestration_catalog,
+                "iterations": [{"iteration": 1, "actions": orchestration_actions}],
+                "done_reason": orchestration_done_reason,
+                "usage": {
+                    "engine": "core.mode_orchestrator.iter_bounded_cycles",
+                    "max_iterations": 1,
+                    "max_wall_time_ms": 1200,
+                },
+            },
             "llm_usage": llm_outcome.usage,
             "provenance": provenance_section(
                 llm_used=bool(llm_outcome.usage.get("used")),
