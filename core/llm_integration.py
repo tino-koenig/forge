@@ -185,13 +185,69 @@ def _openai_compatible_complete(
     system_prompt: str,
     user_prompt: str,
     timeout_s: float | None = None,
-) -> str:
+) -> tuple[str, dict[str, int | None]]:
     return llm_foundation.complete(
         settings=settings,
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         timeout_s=timeout_s,
     )
+
+
+def _attach_usage_cost_metrics(
+    *,
+    usage: dict[str, object],
+    settings: ResolvedLLMConfig,
+    provider_usage: dict[str, int | None] | None,
+) -> None:
+    prompt_tokens = provider_usage.get("prompt_tokens") if isinstance(provider_usage, dict) else None
+    completion_tokens = provider_usage.get("completion_tokens") if isinstance(provider_usage, dict) else None
+    total_tokens = provider_usage.get("total_tokens") if isinstance(provider_usage, dict) else None
+    if total_tokens is None and prompt_tokens is not None and completion_tokens is not None:
+        total_tokens = prompt_tokens + completion_tokens
+    usage["token_usage"] = {
+        "prompt_tokens": prompt_tokens if prompt_tokens is not None else "unknown",
+        "completion_tokens": completion_tokens if completion_tokens is not None else "unknown",
+        "total_tokens": total_tokens if total_tokens is not None else "unknown",
+        "source": "provider" if provider_usage else "unknown",
+    }
+    estimated_cost = None
+    if (
+        prompt_tokens is not None
+        and completion_tokens is not None
+        and settings.pricing_input_per_1k is not None
+        and settings.pricing_output_per_1k is not None
+    ):
+        estimated_cost = round(
+            ((prompt_tokens / 1000.0) * settings.pricing_input_per_1k)
+            + ((completion_tokens / 1000.0) * settings.pricing_output_per_1k),
+            8,
+        )
+    cost_warnings: list[str] = []
+    if settings.cost_tracking_enabled:
+        if estimated_cost is not None and settings.cost_warn_cost_per_request is not None:
+            if estimated_cost >= settings.cost_warn_cost_per_request:
+                cost_warnings.append(
+                    f"estimated request cost {estimated_cost:.6f} {settings.pricing_currency} exceeds warning threshold {settings.cost_warn_cost_per_request:.6f}"
+                )
+        if total_tokens is not None and settings.cost_warn_tokens_per_request is not None:
+            if total_tokens >= settings.cost_warn_tokens_per_request:
+                cost_warnings.append(
+                    f"total tokens {total_tokens} exceed warning threshold {settings.cost_warn_tokens_per_request}"
+                )
+    usage["cost_tracking"] = {
+        "enabled": settings.cost_tracking_enabled,
+        "pricing_configured": settings.pricing_input_per_1k is not None and settings.pricing_output_per_1k is not None,
+        "currency": settings.pricing_currency,
+        "input_per_1k": settings.pricing_input_per_1k if settings.pricing_input_per_1k is not None else "unknown",
+        "output_per_1k": settings.pricing_output_per_1k if settings.pricing_output_per_1k is not None else "unknown",
+    }
+    usage["cost"] = {
+        "estimated_per_request": estimated_cost if estimated_cost is not None else "unknown",
+        "currency": settings.pricing_currency,
+        "warned": bool(cost_warnings),
+        "warnings": cost_warnings,
+    }
 
 
 def _query_planner_template_path() -> Path:
@@ -453,6 +509,25 @@ def maybe_plan_query_terms(
         "latency_ms": None,
         "source_language": source_language,
         "output_language": settings.output_language,
+        "token_usage": {
+            "prompt_tokens": "unknown",
+            "completion_tokens": "unknown",
+            "total_tokens": "unknown",
+            "source": "unknown",
+        },
+        "cost_tracking": {
+            "enabled": settings.cost_tracking_enabled,
+            "pricing_configured": settings.pricing_input_per_1k is not None and settings.pricing_output_per_1k is not None,
+            "currency": settings.pricing_currency,
+            "input_per_1k": settings.pricing_input_per_1k if settings.pricing_input_per_1k is not None else "unknown",
+            "output_per_1k": settings.pricing_output_per_1k if settings.pricing_output_per_1k is not None else "unknown",
+        },
+        "cost": {
+            "estimated_per_request": "unknown",
+            "currency": settings.pricing_currency,
+            "warned": False,
+            "warnings": [],
+        },
     }
 
     def _finish(
@@ -590,13 +665,14 @@ def maybe_plan_query_terms(
                     raise RuntimeError(system_error)
                 assert system_prompt is not None
                 timeout_s = min(settings.timeout_s, max(settings.query_planner_max_latency_ms / 1000.0, 0.2))
-                text = _openai_compatible_complete(
+                text, provider_usage = _openai_compatible_complete(
                     settings=settings,
                     system_prompt=system_prompt,
                     user_prompt=prompt,
                     timeout_s=timeout_s,
                 )
                 raw_result = _extract_json_object(text)
+                _attach_usage_cost_metrics(usage=usage, settings=settings, provider_usage=provider_usage)
         else:
             raise RuntimeError(f"provider '{settings.provider}' is not supported")
         latency_ms = int((time.perf_counter() - started) * 1000)
@@ -723,6 +799,25 @@ def maybe_orchestrate_query_actions(
         "max_wall_time_ms": settings.query_orchestrator_max_wall_time_ms,
         "catalog": action_catalog,
         "iteration": iteration,
+        "token_usage": {
+            "prompt_tokens": "unknown",
+            "completion_tokens": "unknown",
+            "total_tokens": "unknown",
+            "source": "unknown",
+        },
+        "cost_tracking": {
+            "enabled": settings.cost_tracking_enabled,
+            "pricing_configured": settings.pricing_input_per_1k is not None and settings.pricing_output_per_1k is not None,
+            "currency": settings.pricing_currency,
+            "input_per_1k": settings.pricing_input_per_1k if settings.pricing_input_per_1k is not None else "unknown",
+            "output_per_1k": settings.pricing_output_per_1k if settings.pricing_output_per_1k is not None else "unknown",
+        },
+        "cost": {
+            "estimated_per_request": "unknown",
+            "currency": settings.pricing_currency,
+            "warned": False,
+            "warnings": [],
+        },
     }
     decisions: list[QueryActionDecision] = []
 
@@ -798,13 +893,14 @@ def maybe_orchestrate_query_actions(
                     return _finish("policy_blocked", system_error)
                 assert system_prompt is not None
                 timeout_s = min(settings.timeout_s, max(settings.query_orchestrator_max_wall_time_ms / 1000.0, 0.2))
-                raw = _openai_compatible_complete(
+                raw, provider_usage = _openai_compatible_complete(
                     settings=settings,
                     system_prompt=system_prompt,
                     user_prompt=prompt,
                     timeout_s=timeout_s,
                 )
                 raw_result = _extract_json_object(raw)
+                _attach_usage_cost_metrics(usage=usage, settings=settings, provider_usage=provider_usage)
         else:
             return _finish("policy_blocked", f"provider '{settings.provider}' is not supported")
 

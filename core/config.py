@@ -41,6 +41,12 @@ class ResolvedLLMConfig:
     observability_level: str
     observability_retention_count: int
     observability_max_file_mb: int
+    cost_tracking_enabled: bool
+    cost_warn_cost_per_request: float | None
+    cost_warn_tokens_per_request: int | None
+    pricing_input_per_1k: float | None
+    pricing_output_per_1k: float | None
+    pricing_currency: str
     source: dict[str, str]
     validation_error: str | None = None
 
@@ -168,6 +174,12 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
             observability_level="minimal",
             observability_retention_count=1000,
             observability_max_file_mb=20,
+            cost_tracking_enabled=True,
+            cost_warn_cost_per_request=None,
+            cost_warn_tokens_per_request=None,
+            pricing_input_per_1k=None,
+            pricing_output_per_1k=None,
+            pricing_currency="USD",
             source={"config": "error"},
             validation_error=str(payload["_error"]),
         )
@@ -201,6 +213,12 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
             observability_level="minimal",
             observability_retention_count=1000,
             observability_max_file_mb=20,
+            cost_tracking_enabled=True,
+            cost_warn_cost_per_request=None,
+            cost_warn_tokens_per_request=None,
+            pricing_input_per_1k=None,
+            pricing_output_per_1k=None,
+            pricing_currency="USD",
             source={"config.local": "error"},
             validation_error=str(local_payload["_error"]),
         )
@@ -429,6 +447,65 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
     observability_retention_count = _int_or_default(observability_retention_count_raw, 1000)
     observability_max_file_mb = _int_or_default(observability_max_file_mb_raw, 20)
 
+    cost_tracking_enabled_raw, source["cost_tracking_enabled"] = _first_non_none(
+        [
+            ("toml_local", _nested_get(local_payload, "llm.cost_tracking.enabled")),
+            ("toml", _nested_get(payload, "llm.cost_tracking.enabled")),
+            ("default", True),
+        ]
+    )
+    cost_warn_cost_raw, source["cost_warn_cost_per_request"] = _first_non_none(
+        [
+            ("toml_local", _nested_get(local_payload, "llm.cost_tracking.warn_cost_per_request")),
+            ("toml", _nested_get(payload, "llm.cost_tracking.warn_cost_per_request")),
+        ]
+    )
+    cost_warn_tokens_raw, source["cost_warn_tokens_per_request"] = _first_non_none(
+        [
+            ("toml_local", _nested_get(local_payload, "llm.cost_tracking.warn_tokens_per_request")),
+            ("toml", _nested_get(payload, "llm.cost_tracking.warn_tokens_per_request")),
+        ]
+    )
+    pricing_input_raw, source["pricing_input_per_1k"] = _first_non_none(
+        [
+            ("toml_local", _nested_get(local_payload, "llm.pricing.input_per_1k")),
+            ("toml", _nested_get(payload, "llm.pricing.input_per_1k")),
+        ]
+    )
+    pricing_output_raw, source["pricing_output_per_1k"] = _first_non_none(
+        [
+            ("toml_local", _nested_get(local_payload, "llm.pricing.output_per_1k")),
+            ("toml", _nested_get(payload, "llm.pricing.output_per_1k")),
+        ]
+    )
+    pricing_currency_raw, source["pricing_currency"] = _first_non_none(
+        [
+            ("toml_local", _nested_get(local_payload, "llm.pricing.currency")),
+            ("toml", _nested_get(payload, "llm.pricing.currency")),
+            ("default", "USD"),
+        ]
+    )
+    cost_tracking_enabled = _bool_or_default(cost_tracking_enabled_raw, True)
+    cost_warn_cost_per_request = (
+        _float_or_default(cost_warn_cost_raw, -1.0) if cost_warn_cost_raw is not None else None
+    )
+    if isinstance(cost_warn_cost_per_request, float) and cost_warn_cost_per_request < 0:
+        cost_warn_cost_per_request = None
+    cost_warn_tokens_per_request = (
+        _int_or_default(cost_warn_tokens_raw, -1) if cost_warn_tokens_raw is not None else None
+    )
+    if isinstance(cost_warn_tokens_per_request, int) and cost_warn_tokens_per_request < 0:
+        cost_warn_tokens_per_request = None
+    pricing_input_per_1k = _float_or_default(pricing_input_raw, -1.0) if pricing_input_raw is not None else None
+    if isinstance(pricing_input_per_1k, float) and pricing_input_per_1k < 0:
+        pricing_input_per_1k = None
+    pricing_output_per_1k = _float_or_default(pricing_output_raw, -1.0) if pricing_output_raw is not None else None
+    if isinstance(pricing_output_per_1k, float) and pricing_output_per_1k < 0:
+        pricing_output_per_1k = None
+    pricing_currency = str(pricing_currency_raw).strip().upper() if pricing_currency_raw is not None else "USD"
+    if not pricing_currency:
+        pricing_currency = "USD"
+
     validation_errors: list[str] = []
     if provider is not None and provider not in {"openai_compatible", "mock"}:
         validation_errors.append(f"unknown provider '{provider}'")
@@ -474,6 +551,16 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
         validation_errors.append("observability.retention_count must be within [100, 100000]")
     if observability_max_file_mb < 1 or observability_max_file_mb > 1024:
         validation_errors.append("observability.max_file_mb must be within [1, 1024]")
+    if cost_warn_cost_per_request is not None and cost_warn_cost_per_request < 0:
+        validation_errors.append("cost_tracking.warn_cost_per_request must be >= 0")
+    if cost_warn_tokens_per_request is not None and cost_warn_tokens_per_request < 0:
+        validation_errors.append("cost_tracking.warn_tokens_per_request must be >= 0")
+    if pricing_input_per_1k is not None and pricing_input_per_1k < 0:
+        validation_errors.append("pricing.input_per_1k must be >= 0")
+    if pricing_output_per_1k is not None and pricing_output_per_1k < 0:
+        validation_errors.append("pricing.output_per_1k must be >= 0")
+    if len(pricing_currency) > 12 or not pricing_currency.replace("_", "").isalnum():
+        validation_errors.append("pricing.currency must be an uppercase currency-like code")
     if not system_template_path.exists():
         validation_errors.append(f"missing system template: {system_template_path}")
     elif not system_template_path.is_file():
@@ -512,6 +599,12 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
         observability_level=observability_level,
         observability_retention_count=observability_retention_count,
         observability_max_file_mb=observability_max_file_mb,
+        cost_tracking_enabled=cost_tracking_enabled,
+        cost_warn_cost_per_request=cost_warn_cost_per_request,
+        cost_warn_tokens_per_request=cost_warn_tokens_per_request,
+        pricing_input_per_1k=pricing_input_per_1k,
+        pricing_output_per_1k=pricing_output_per_1k,
+        pricing_currency=pricing_currency,
         source=source,
         validation_error=validation_error,
     )

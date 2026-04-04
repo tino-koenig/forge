@@ -148,11 +148,15 @@ implemented_on = "2026-04-03"
 
 [[feature]]
 id = "029"
-status = "defined"
+status = "implemented"
+implemented_on = "2026-04-04"
+notes = "Added explicit token/cost tracking in llm_usage with pricing config, unknown fallbacks, and planner/orchestrator usage coverage."
 
 [[feature]]
 id = "030"
-status = "defined"
+status = "implemented"
+implemented_on = "2026-04-04"
+notes = "Added canonical step protocol schema and persisted execution.protocol_events with deterministic and optional llm steps."
 
 [[feature]]
 id = "031"
@@ -310,6 +314,27 @@ status = "implemented"
 defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Added reusable LLM foundation APIs (policy/settings/prompt/complete/run_llm_step) and integrated llm_integration delegation for consistent fallback/usage metadata."
+
+[[feature]]
+id = "058"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Added explain facet alias routing (`explain:<facet>`) with `--focus` parity, deterministic alias/flag conflict validation, and explain focus provenance fields in contracts."
+
+[[feature]]
+id = "059"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Implemented explain `settings` and `defaults` facets with deterministic direct answers plus structured `settings_influences` and `default_values` evidence sections."
+
+[[feature]]
+id = "060"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Implemented explain `llm` and `outputs` facets with deterministic direct answers plus structured `llm_participation` and `output_surfaces` sections."
 
 [[feature]]
 id = "045"

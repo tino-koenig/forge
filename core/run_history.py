@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from core.step_protocol import normalize_protocol_events
+
 
 def history_path(repo_root: Path) -> Path:
     return repo_root / ".forge" / "runs.jsonl"
@@ -62,15 +64,20 @@ def append_run(
     path.parent.mkdir(parents=True, exist_ok=True)
     records = load_runs(repo_root)
     next_id = (int(records[-1].get("id", 0)) + 1) if records else 1
+    execution_payload = dict(execution)
+    execution_payload["protocol_events"] = normalize_protocol_events(
+        run_id=next_id,
+        capability=str(request.get("capability") or "unknown"),
+        events=execution_payload.get("protocol_events") if isinstance(execution_payload.get("protocol_events"), list) else [],
+    )
     record = {
         "id": next_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "request": request,
-        "execution": execution,
+        "execution": execution_payload,
         "output": output,
     }
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, sort_keys=True))
         fh.write("\n")
     return next_id
-

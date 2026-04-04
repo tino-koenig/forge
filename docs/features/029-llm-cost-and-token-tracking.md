@@ -83,3 +83,39 @@ Separating this from query-planner quality keeps concerns clean.
   - usage-present path
   - usage-missing path
   - pricing-config and no-pricing variants
+
+## Implemented Behavior (Current)
+
+- Implementation status: implemented.
+- Traceability: `CHANGELOG.md` references feature 029; status/implemented date are tracked in `docs/status/features-index.md`.
+- Added LLM cost-tracking config fields in resolved settings:
+  - `llm.cost_tracking.enabled`
+  - `llm.cost_tracking.warn_cost_per_request`
+  - `llm.cost_tracking.warn_tokens_per_request`
+  - `llm.pricing.input_per_1k`
+  - `llm.pricing.output_per_1k`
+  - `llm.pricing.currency`
+- `sections.llm_usage` now carries token and cost metadata for LLM-assisted paths with explicit unknown fallback:
+  - `token_usage` (`prompt_tokens`, `completion_tokens`, `total_tokens`, `source`)
+  - `cost_tracking` (`enabled`, pricing fields, currency)
+  - `cost` (`estimated_per_request`, `currency`, warning status/messages)
+- Query planner and query action orchestrator usage blocks expose the same token/cost structures in their `usage` sections.
+- Pricing is warn-only: no retrieval/scoring behavior is changed by cost tracking.
+
+## How To Validate Quickly
+
+- Explain JSON contract:
+  - `forge --output-format json --view full explain core/llm_observability.py`
+  - inspect `sections.llm_usage.token_usage`, `sections.llm_usage.cost_tracking`, `sections.llm_usage.cost`
+- Query JSON contract:
+  - `forge --output-format json --view full query "Wo ist enrich_detailed_context definiert?"`
+  - inspect:
+    - `sections.query_planner.usage.token_usage/cost_tracking/cost`
+    - `sections.action_orchestration.usage.token_usage/cost_tracking/cost`
+- With no provider usage/pricing, fields stay explicit (`"unknown"`), capability execution continues.
+
+## Known Limits / Notes
+
+- Cost estimates are only produced when both token usage and pricing are available.
+- Current provider token extraction relies on standard usage fields (`prompt_tokens`, `completion_tokens`, `total_tokens`).
+- Warning thresholds are informational and surfaced via usage warnings/uncertainty notes; they do not enforce hard stop behavior.

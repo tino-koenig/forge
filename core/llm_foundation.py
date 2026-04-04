@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from string import Template
+import time
 from urllib import error, request
 
 from core.capability_model import Capability, Profile
@@ -84,6 +85,12 @@ def resolve_settings(args, repo_root: Path) -> ResolvedLLMConfig:
             observability_level=config.observability_level,
             observability_retention_count=config.observability_retention_count,
             observability_max_file_mb=config.observability_max_file_mb,
+            cost_tracking_enabled=config.cost_tracking_enabled,
+            cost_warn_cost_per_request=config.cost_warn_cost_per_request,
+            cost_warn_tokens_per_request=config.cost_warn_tokens_per_request,
+            pricing_input_per_1k=config.pricing_input_per_1k,
+            pricing_output_per_1k=config.pricing_output_per_1k,
+            pricing_currency=config.pricing_currency,
             source=config.source,
             validation_error=config.validation_error,
         )
@@ -160,15 +167,44 @@ def mock_complete(*, capability: Capability, deterministic_summary: str, evidenc
     return f"{deterministic_summary} Primary evidence anchor: {first_path}."
 
 
+def _extract_provider_token_usage(parsed: dict[str, object]) -> dict[str, int | None]:
+    usage = parsed.get("usage")
+    if not isinstance(usage, dict):
+        return {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
+    prompt_tokens = usage.get("prompt_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    total_tokens = usage.get("total_tokens")
+    prompt = int(prompt_tokens) if isinstance(prompt_tokens, int) and prompt_tokens >= 0 else None
+    completion = int(completion_tokens) if isinstance(completion_tokens, int) and completion_tokens >= 0 else None
+    total = int(total_tokens) if isinstance(total_tokens, int) and total_tokens >= 0 else None
+    if total is None and prompt is not None and completion is not None:
+        total = prompt + completion
+    return {"prompt_tokens": prompt, "completion_tokens": completion, "total_tokens": total}
+
+
+def _estimate_cost(
+    *,
+    prompt_tokens: int | None,
+    completion_tokens: int | None,
+    input_per_1k: float | None,
+    output_per_1k: float | None,
+) -> float | None:
+    if prompt_tokens is None or completion_tokens is None:
+        return None
+    if input_per_1k is None or output_per_1k is None:
+        return None
+    return round(((prompt_tokens / 1000.0) * input_per_1k) + ((completion_tokens / 1000.0) * output_per_1k), 8)
+
+
 def complete(
     *,
     settings: ResolvedLLMConfig,
     system_prompt: str,
     user_prompt: str,
     timeout_s: float | None = None,
-) -> str:
+) -> tuple[str, dict[str, int | None]]:
     if settings.provider == "mock":
-        return ""  # caller should use mock_complete to preserve capability-aware behavior
+        return "", {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}  # caller should use mock_complete to preserve capability-aware behavior
 
     if settings.provider != "openai_compatible":
         raise RuntimeError(f"provider '{settings.provider}' is not supported")
@@ -182,7 +218,10 @@ def complete(
 
     base_url = settings.base_url.rstrip("/")
     if base_url.startswith("mock://"):
-        return f"Refined via openai_compatible provider using model {settings.model}."
+        return (
+            f"Refined via openai_compatible provider using model {settings.model}.",
+            {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None},
+        )
 
     endpoint = f"{base_url}/chat/completions"
     payload = {
@@ -222,7 +261,7 @@ def complete(
             message = choices[0].get("message", {})
             content = message.get("content")
             if isinstance(content, str) and content.strip():
-                return content.strip()
+                return content.strip(), _extract_provider_token_usage(parsed)
             if isinstance(content, list):
                 text_parts: list[str] = []
                 for item in content:
@@ -230,7 +269,7 @@ def complete(
                         text_parts.append(item["text"])
                 text = "\n".join(part.strip() for part in text_parts if part.strip()).strip()
                 if text:
-                    return text
+                    return text, _extract_provider_token_usage(parsed)
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"invalid JSON response: {exc}") from exc
 
@@ -262,6 +301,24 @@ def run_llm_step(
         "attempted": False,
         "used": False,
         "fallback_reason": None,
+        "latency_ms": None,
+        "token_usage": {
+            "prompt_tokens": "unknown",
+            "completion_tokens": "unknown",
+            "total_tokens": "unknown",
+            "source": "provider_or_unknown",
+        },
+        "cost_tracking": {
+            "enabled": settings.cost_tracking_enabled,
+            "pricing_configured": settings.pricing_input_per_1k is not None and settings.pricing_output_per_1k is not None,
+            "currency": settings.pricing_currency,
+        },
+        "cost": {
+            "estimated_per_request": "unknown",
+            "currency": settings.pricing_currency,
+            "warned": False,
+            "warnings": [],
+        },
         "config_source": settings.source,
         "prompt_template": str(template_path_for_capability(capability).relative_to(Path(__file__).resolve().parents[1])),
     }
@@ -326,19 +383,65 @@ def run_llm_step(
     assert system_prompt is not None
 
     try:
+        started = time.perf_counter()
         if settings.provider == "mock":
             refined = mock_complete(
                 capability=capability,
                 deterministic_summary=deterministic_summary,
                 evidence=evidence,
             )
+            provider_usage = {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
         else:
-            refined = complete(
+            refined, provider_usage = complete(
                 settings=settings,
                 system_prompt=system_prompt,
                 user_prompt=prompt,
             )
+        usage["latency_ms"] = int((time.perf_counter() - started) * 1000)
+        prompt_tokens = provider_usage.get("prompt_tokens")
+        completion_tokens = provider_usage.get("completion_tokens")
+        total_tokens = provider_usage.get("total_tokens")
+        usage["token_usage"] = {
+            "prompt_tokens": prompt_tokens if prompt_tokens is not None else "unknown",
+            "completion_tokens": completion_tokens if completion_tokens is not None else "unknown",
+            "total_tokens": total_tokens if total_tokens is not None else "unknown",
+            "source": "provider" if total_tokens is not None or prompt_tokens is not None or completion_tokens is not None else "unknown",
+        }
+        estimated_cost = None
+        cost_warnings: list[str] = []
+        if settings.cost_tracking_enabled:
+            estimated_cost = _estimate_cost(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                input_per_1k=settings.pricing_input_per_1k,
+                output_per_1k=settings.pricing_output_per_1k,
+            )
+            if estimated_cost is not None and settings.cost_warn_cost_per_request is not None:
+                if estimated_cost >= settings.cost_warn_cost_per_request:
+                    cost_warnings.append(
+                        f"estimated request cost {estimated_cost:.6f} {settings.pricing_currency} exceeds warning threshold {settings.cost_warn_cost_per_request:.6f}"
+                    )
+            if total_tokens is not None and settings.cost_warn_tokens_per_request is not None:
+                if total_tokens >= settings.cost_warn_tokens_per_request:
+                    cost_warnings.append(
+                        f"total tokens {total_tokens} exceed warning threshold {settings.cost_warn_tokens_per_request}"
+                    )
+        usage["cost"] = {
+            "estimated_per_request": estimated_cost if estimated_cost is not None else "unknown",
+            "currency": settings.pricing_currency,
+            "warned": bool(cost_warnings),
+            "warnings": cost_warnings,
+        }
+        usage["cost_tracking"] = {
+            "enabled": settings.cost_tracking_enabled,
+            "pricing_configured": settings.pricing_input_per_1k is not None and settings.pricing_output_per_1k is not None,
+            "currency": settings.pricing_currency,
+            "input_per_1k": settings.pricing_input_per_1k if settings.pricing_input_per_1k is not None else "unknown",
+            "output_per_1k": settings.pricing_output_per_1k if settings.pricing_output_per_1k is not None else "unknown",
+        }
         usage["used"] = True
+        if cost_warnings:
+            uncertainty_notes.extend([f"LLM cost warning: {item}" for item in cost_warnings])
         uncertainty_notes.append("Summary includes assistive LLM wording; verify nuanced interpretation manually.")
         return LLMRunOutcome(summary=refined, usage=usage, uncertainty_notes=uncertainty_notes)
     except Exception as exc:  # pragma: no cover - defensive fallback

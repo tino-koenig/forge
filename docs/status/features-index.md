@@ -38,8 +38,8 @@ Status values:
 | 026 | Human-First Default Output | 2026-04-03 | implemented | 2026-04-03 | [026-human-first-default-output.md](/Users/tino/PhpstormProjects/forge/docs/features/026-human-first-default-output.md) |
 | 027 | Cross-Lingual Term Expansion | 2026-04-03 | implemented | 2026-04-03 | [027-cross-lingual-term-expansion.md](/Users/tino/PhpstormProjects/forge/docs/features/027-cross-lingual-term-expansion.md) |
 | 028 | LLM Query Planner | 2026-04-03 | implemented | 2026-04-03 | [028-llm-query-planner.md](/Users/tino/PhpstormProjects/forge/docs/features/028-llm-query-planner.md) |
-| 029 | LLM Cost and Token Tracking | 2026-04-03 | defined | - | [029-llm-cost-and-token-tracking.md](/Users/tino/PhpstormProjects/forge/docs/features/029-llm-cost-and-token-tracking.md) |
-| 030 | LLM-Assisted Step Protocol and Event Model | 2026-04-03 | defined | - | [030-llm-assisted-step-protocol-and-event-model.md](/Users/tino/PhpstormProjects/forge/docs/features/030-llm-assisted-step-protocol-and-event-model.md) |
+| 029 | LLM Cost and Token Tracking | 2026-04-03 | implemented | 2026-04-04 | [029-llm-cost-and-token-tracking.md](/Users/tino/PhpstormProjects/forge/docs/features/029-llm-cost-and-token-tracking.md) |
+| 030 | LLM-Assisted Step Protocol and Event Model | 2026-04-03 | implemented | 2026-04-04 | [030-llm-assisted-step-protocol-and-event-model.md](/Users/tino/PhpstormProjects/forge/docs/features/030-llm-assisted-step-protocol-and-event-model.md) |
 | 031 | Protocol Log Storage (JSONL First) | 2026-04-03 | defined | - | [031-protocol-log-storage-jsonl-first.md](/Users/tino/PhpstormProjects/forge/docs/features/031-protocol-log-storage-jsonl-first.md) |
 | 032 | Log Viewer and Run-Focused Inspection | 2026-04-03 | defined | - | [032-log-viewer-and-run-focused-inspection.md](/Users/tino/PhpstormProjects/forge/docs/features/032-log-viewer-and-run-focused-inspection.md) |
 | 033 | Log Filtering and LLM Query Analytics | 2026-04-03 | defined | - | [033-log-filtering-and-llm-query-analytics.md](/Users/tino/PhpstormProjects/forge/docs/features/033-log-filtering-and-llm-query-analytics.md) |
@@ -70,9 +70,10 @@ Status values:
 | 058 | Explain Facet Alias Routing | 2026-04-04 | implemented | 2026-04-04 | [058-explain-facet-alias-routing.md](/Users/tino/PhpstormProjects/forge/docs/features/058-explain-facet-alias-routing.md) |
 | 059 | Explain Settings and Defaults Facets | 2026-04-04 | implemented | 2026-04-04 | [059-explain-settings-and-defaults-facets.md](/Users/tino/PhpstormProjects/forge/docs/features/059-explain-settings-and-defaults-facets.md) |
 | 060 | Explain LLM and Output Facets | 2026-04-04 | implemented | 2026-04-04 | [060-explain-llm-and-output-facets.md](/Users/tino/PhpstormProjects/forge/docs/features/060-explain-llm-and-output-facets.md) |
-| 061 | Runtime Settings via `forge set/get` | unknown | defined | - | [061-runtime-settings-set-get.md](/Users/tino/PhpstormProjects/forge/docs/features/061-runtime-settings-set-get.md) |
-| 062 | Runtime Settings Foundation: Registry, Resolver, Source Tracing | unknown | defined | - | [062-runtime-settings-foundation-registry-resolver.md](/Users/tino/PhpstormProjects/forge/docs/features/062-runtime-settings-foundation-registry-resolver.md) |
-| 063 | Named Session Context with Auto-Create and TTL | unknown | defined | - | [063-named-session-context-and-ttl.md](/Users/tino/PhpstormProjects/forge/docs/features/063-named-session-context-and-ttl.md) |
+| 061 | Runtime Settings via `forge set/get` | 2026-04-04 | defined | - | [061-runtime-settings-set-get.md](/Users/tino/PhpstormProjects/forge/docs/features/061-runtime-settings-set-get.md) |
+| 062 | Runtime Settings Foundation: Registry, Resolver, Source Tracing | 2026-04-04 | defined | - | [062-runtime-settings-foundation-registry-resolver.md](/Users/tino/PhpstormProjects/forge/docs/features/062-runtime-settings-foundation-registry-resolver.md) |
+| 063 | Named Session Context with Auto-Create and TTL | 2026-04-04 | defined | - | [063-named-session-context-and-ttl.md](/Users/tino/PhpstormProjects/forge/docs/features/063-named-session-context-and-ttl.md) |
+| 064 | README v2: Value, Trust & Control Positioning | unknown | defined | - | [064-readme-v2-value-trust-and-control.md](/Users/tino/PhpstormProjects/forge/docs/features/064-readme-v2-value-trust-and-control.md) |
 
 ## Notes
 - 001: Core CLI and capability model implemented.
@@ -80,6 +81,8 @@ Status values:
 - 021: Explain now emits structured evidence/inference/confidence sections with detailed alternatives.
 - 024: Added runs prune with dry-run, retention criteria, config defaults, and safe rewrite behavior.
 - 025: Added --from-run resolution across explain/review/test/describe with provenance metadata.
+- 029: Added explicit token/cost tracking in llm_usage with pricing config, unknown fallbacks, and planner/orchestrator usage coverage.
+- 030: Added canonical step protocol schema and persisted execution.protocol_events with deterministic and optional llm steps.
 - 035: LLM output language control via CLI/env/TOML and prompt propagation.
 - 036: Added central mode-action contract, executor enforcement wiring, and query planner boundary notes for blocked write intent.
 - 037: Added bounded query action orchestration with catalog decisions, budgets, fallback handling, and done_reason.

@@ -7,12 +7,14 @@ import io
 import json
 from pathlib import Path
 import sys
+import time
 
 from core.capability_model import build_request
 from core.env_loader import load_env_file
 from core.output_contracts import consume_last_contract, reset_last_contract
 from core.run_history import append_run
 from core.runtime import execute
+from core.step_protocol import build_step_event, llm_step_events_from_usage
 
 
 REQUIRES_PAYLOAD = {
@@ -518,6 +520,7 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("Unsupported config command. Use: forge config validate")
             return 2
         capability_name = "doctor"
+    preprocessing_started = time.perf_counter()
     try:
         require_payload = REQUIRES_PAYLOAD[capability_name]
         if capability_name in FROM_RUN_CAPABILITIES and getattr(args, "from_run", None) is not None:
@@ -530,6 +533,34 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         parser.error(str(exc))
         return 2
+    preprocessing_duration_ms = int((time.perf_counter() - preprocessing_started) * 1000)
+    protocol_events: list[dict[str, object]] = [
+        build_step_event(
+            run_id=0,
+            capability=request.capability.value,
+            step_name="deterministic_preprocessing",
+            step_type="deterministic",
+            status="started",
+            metadata={"argv_count": len(argv or [])},
+        ),
+        build_step_event(
+            run_id=0,
+            capability=request.capability.value,
+            step_name="deterministic_preprocessing",
+            step_type="deterministic",
+            status="completed",
+            duration_ms=preprocessing_duration_ms,
+            metadata={"require_payload": require_payload},
+        ),
+        build_step_event(
+            run_id=0,
+            capability=request.capability.value,
+            step_name="capability_execution",
+            step_type="deterministic",
+            status="started",
+            metadata={"profile": request.profile.value},
+        ),
+    ]
     stdout_capture = io.StringIO()
     original_stdout = sys.stdout
     reset_last_contract()
@@ -544,12 +575,26 @@ def main(argv: list[str] | None = None) -> int:
             original_stdout.flush()
 
     sys.stdout = _Tee()
+    execution_started = time.perf_counter()
     try:
         exit_code = execute(request=request, args=args)
     finally:
         sys.stdout = original_stdout
+    execution_duration_ms = int((time.perf_counter() - execution_started) * 1000)
+    protocol_events.append(
+        build_step_event(
+            run_id=0,
+            capability=request.capability.value,
+            step_name="capability_execution",
+            step_type="deterministic",
+            status="completed" if exit_code == 0 else "failed",
+            duration_ms=execution_duration_ms,
+            metadata={"exit_code": exit_code},
+        )
+    )
 
     if capability_name != "runs":
+        assembly_started = time.perf_counter()
         text_output = stdout_capture.getvalue()
         contract_payload = consume_last_contract()
         if args.output_format == "json":
@@ -571,6 +616,58 @@ def main(argv: list[str] | None = None) -> int:
                 "next_step": "Re-run capability with --output-format json for full structured payload.",
                 "sections": {"status": "fallback_contract"},
             }
+        assembly_duration_ms = int((time.perf_counter() - assembly_started) * 1000)
+        protocol_events.extend(
+            [
+                build_step_event(
+                    run_id=0,
+                    capability=request.capability.value,
+                    step_name="output_assembly",
+                    step_type="io",
+                    status="started",
+                    metadata={"output_format": args.output_format},
+                ),
+                build_step_event(
+                    run_id=0,
+                    capability=request.capability.value,
+                    step_name="output_assembly",
+                    step_type="io",
+                    status="completed",
+                    duration_ms=assembly_duration_ms,
+                    metadata={"has_contract": isinstance(contract_payload, dict)},
+                ),
+            ]
+        )
+        sections = contract_payload.get("sections", {}) if isinstance(contract_payload, dict) else {}
+        if isinstance(sections, dict):
+            protocol_events.extend(
+                llm_step_events_from_usage(
+                    run_id=0,
+                    capability=request.capability.value,
+                    step_name="summary_refinement",
+                    usage=sections.get("llm_usage") if isinstance(sections.get("llm_usage"), dict) else None,
+                )
+            )
+            planner = sections.get("query_planner")
+            if isinstance(planner, dict):
+                protocol_events.extend(
+                    llm_step_events_from_usage(
+                        run_id=0,
+                        capability=request.capability.value,
+                        step_name="query_planner",
+                        usage=planner.get("usage") if isinstance(planner.get("usage"), dict) else None,
+                    )
+                )
+            orchestration = sections.get("action_orchestration")
+            if isinstance(orchestration, dict):
+                protocol_events.extend(
+                    llm_step_events_from_usage(
+                        run_id=0,
+                        capability=request.capability.value,
+                        step_name="query_action_orchestrator",
+                        usage=orchestration.get("usage") if isinstance(orchestration.get("usage"), dict) else None,
+                    )
+                )
         append_run(
             repo_root=repo_root,
             request={
@@ -582,6 +679,7 @@ def main(argv: list[str] | None = None) -> int:
             execution={
                 "exit_code": exit_code,
                 "output_format": args.output_format,
+                "protocol_events": protocol_events,
             },
             output={
                 "text": text_output,

@@ -1184,6 +1184,13 @@ def gate_run_history_contract_always_persisted(repo_root: Path) -> None:
     assert_true(isinstance(sections, dict), "history contract: expected sections object in stored contract")
     likely = sections.get("likely_locations", [])
     assert_true(isinstance(likely, list), "history contract: expected likely_locations list")
+    execution = last.get("execution", {})
+    protocol_events = execution.get("protocol_events") if isinstance(execution, dict) else None
+    assert_true(isinstance(protocol_events, list), "history contract: expected execution.protocol_events list")
+    assert_true(len(protocol_events) >= 4, "history contract: expected baseline protocol events")
+    first_event = protocol_events[0] if protocol_events else {}
+    for key in ("event_id", "run_id", "timestamp", "capability", "step_name", "step_type", "status", "metadata"):
+        assert_true(key in first_event, f"history contract: protocol event missing key '{key}'")
 
     run_id = int(last.get("id", 0))
     assert_true(run_id > 0, "history contract: expected valid run id")
