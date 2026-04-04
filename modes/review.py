@@ -8,8 +8,10 @@ from core.analysis_primitives import (
     ResolvedTarget,
     collect_line_evidence as collect_line_evidence_shared,
     find_related_files,
+    is_path_like_target,
     load_index_path_class_map,
     prioritize_paths_by_index,
+    resolve_file_target,
     resolve_file_or_symbol_target,
 )
 from core.capability_model import CommandRequest, Profile
@@ -377,7 +379,12 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         print(f"Run reference error: {exc}")
         return 1
     request = CommandRequest(capability=request.capability, profile=request.profile, payload=resolved_payload)
-    target = resolve_file_or_symbol_target(repo_root, request.payload, session)
+    path_like_target = is_path_like_target(request.payload)
+    target = (
+        resolve_file_target(repo_root, request.payload, session)
+        if path_like_target
+        else resolve_file_or_symbol_target(repo_root, request.payload, session)
+    )
     external_rules, rule_errors = load_review_rules(repo_root)
     path_classes: dict[str, str] = {}
     is_json = args.output_format == "json"
@@ -398,11 +405,18 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
                 print("Index: not available, using direct repository scan only")
 
     if target is None:
-        summary = "Target could not be resolved to a readable file or symbol."
-        uncertainty = [
-            "no matching file path under repo root",
-            "no symbol-like match found in readable text files",
-        ]
+        if path_like_target:
+            summary = "Target path could not be resolved to a readable repository file."
+            uncertainty = [
+                "path-like target did not resolve to a readable file under repo root",
+                "symbol fallback was skipped intentionally for path-like inputs",
+            ]
+        else:
+            summary = "Target could not be resolved to a readable file or symbol."
+            uncertainty = [
+                "no matching file path under repo root",
+                "no symbol-like match found in readable text files",
+            ]
         next_step = 'Run: forge query "where is the relevant logic implemented?"'
         contract = build_contract(
             capability=request.capability.value,

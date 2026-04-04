@@ -25,3 +25,21 @@ When a path-like review target does not exist in the current repository, review 
 ## Linked Features
 
 - [Feature 087 - Review Target Resolution Contract for Path-like Inputs](/Users/tino/PhpstormProjects/forge/docs/features/087-review-target-resolution-contract-for-path-like-inputs.md)
+
+## Implemented Behavior (Current)
+
+- Path-like review payloads are now treated as explicit path intent and no longer fall back to symbol search when unresolved.
+- Unresolved path-like inputs return a deterministic unresolved-target response with explicit uncertainty notes.
+- Symbol fallback remains available for symbol-like payloads.
+- Regression coverage now enforces both branches via `gate_review_path_like_target_resolution_contract`.
+
+## How To Validate Quickly
+
+- Run:
+  - `python3 scripts/run_quality_gates.py`
+- Verify:
+  - `gate_review_path_like_target_resolution_contract` passes.
+
+## Known Limits / Notes
+
+- The fix scopes to review target resolution semantics. Cross-mode path/symbol policy harmonization remains separate.

@@ -532,6 +532,13 @@ defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Explain now exposes central orchestrator runtime/trace metadata under action_orchestration with dedicated regression gate coverage."
 
+[[feature]]
+id = "087"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Review now treats unresolved path-like targets as deterministic unresolved results (no symbol fallback) while preserving symbol fallback for symbol-like inputs."
+
 # Issue examples:
 # [[issue]]
 # id = "12"
@@ -672,6 +679,13 @@ status = "implemented"
 defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Explain now publishes central orchestrator trace/runtime metadata and is protected by dedicated orchestration-adoption regression checks."
+
+[[issue]]
+id = "30"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Review no longer falls back to symbol matching for unresolved path-like payloads and now returns deterministic unresolved guidance."
 
 [[issue]]
 id = "6"

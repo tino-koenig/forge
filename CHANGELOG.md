@@ -39,6 +39,7 @@ All notable changes to Forge should be documented in this file.
 - feature 057: added reusable LLM foundation (`core/llm_foundation.py`) with shared policy/settings/prompt/provider/run-step APIs and integrated delegation from `core/llm_integration.py`
 
 ### Changed
+- feature 087 / issue 30: review target resolution now treats unresolved path-like payloads as deterministic unresolved results (no symbol fallback), while preserving symbol fallback for symbol-like payloads; added dedicated regression gate
 - feature 086 / issue 29: explain ergaenzt zentrale orchestrator-trace-sektion (`action_orchestration`) mit action-katalog, iteration-trace und engine-annotation
 - feature 085 / issue 28: explain-limits auf runtime-settings umgestellt und als source-traceable `sections.explain_limits` kontrakt sichtbar gemacht
 - feature 084 / issue 27: explain-facet-analyse in zentrale core-foundation ausgelagert (`core/explain_analysis_foundation.py`) und mode-lokale duplikate entfernt

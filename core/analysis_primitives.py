@@ -104,12 +104,34 @@ def resolve_repo_path(repo_root: Path, raw_target: str) -> Path | None:
     return abs_path
 
 
-def resolve_file_or_symbol_target(repo_root: Path, raw_target: str, session: ExecutionSession) -> ResolvedTarget | None:
+def is_path_like_target(raw_target: str) -> bool:
+    token = raw_target.strip()
+    if not token:
+        return False
+    if token.startswith(("./", "../", "/", "~")):
+        return True
+    if "/" in token or "\\" in token:
+        return True
+    suffix = Path(token).suffix
+    if len(suffix) > 1:
+        return True
+    return False
+
+
+def resolve_file_target(repo_root: Path, raw_target: str, session: ExecutionSession) -> ResolvedTarget | None:
     abs_path = resolve_repo_path(repo_root, raw_target)
-    if abs_path is not None and abs_path.is_file():
-        content = read_text_file(abs_path, session)
-        if content is not None:
-            return ResolvedTarget(path=abs_path, content=content, source="file", kind="file")
+    if abs_path is None or not abs_path.is_file():
+        return None
+    content = read_text_file(abs_path, session)
+    if content is None:
+        return None
+    return ResolvedTarget(path=abs_path, content=content, source="file", kind="file")
+
+
+def resolve_file_or_symbol_target(repo_root: Path, raw_target: str, session: ExecutionSession) -> ResolvedTarget | None:
+    file_target = resolve_file_target(repo_root, raw_target, session)
+    if file_target is not None:
+        return file_target
 
     symbol = raw_target.strip()
     if not symbol:

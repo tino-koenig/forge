@@ -3045,6 +3045,59 @@ def gate_external_review_rules_invalid(repo_root: Path) -> None:
     assert_true(isinstance(errors, list) and len(errors) >= 1, "external rules invalid: expected surfaced rule error list")
 
 
+def gate_review_path_like_target_resolution_contract(repo_root: Path) -> None:
+    unresolved_path_like = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "review",
+                "src/missing_controller.py",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    unresolved_sections = unresolved_path_like.get("sections", {})
+    assert_true(
+        unresolved_path_like.get("summary") == "Target path could not be resolved to a readable repository file.",
+        "review path-like: expected explicit unresolved path summary",
+    )
+    assert_true(unresolved_sections.get("findings") == [], "review path-like: expected empty findings")
+    assert_true(
+        "target_source" not in unresolved_sections,
+        "review path-like: unresolved path should not expose symbol target source",
+    )
+    unresolved_uncertainty = unresolved_path_like.get("uncertainty", [])
+    assert_true(
+        any("symbol fallback was skipped intentionally" in str(item) for item in unresolved_uncertainty),
+        "review path-like: expected explicit no-symbol-fallback uncertainty",
+    )
+
+    symbol_like = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "review",
+                "compute_price",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    assert_true(
+        symbol_like.get("sections", {}).get("target_source") == "symbol",
+        "review path-like: symbol-like payload should still use symbol fallback",
+    )
+
+
 def gate_from_run_references(repo_root: Path) -> None:
     run_cmd(
         [
@@ -4926,6 +4979,7 @@ def run_all_gates() -> None:
         gate_init_parser_choices_from_registry()
         gate_external_review_rules(temp_repo_rules)
         gate_external_review_rules_invalid(temp_repo_rules_invalid)
+        gate_review_path_like_target_resolution_contract(temp_repo)
         gate_from_run_references(temp_repo)
         gate_run_history_contract_always_persisted(temp_repo)
         gate_protocol_log_storage_jsonl(temp_repo)
