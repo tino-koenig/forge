@@ -27,3 +27,9 @@ Rules:
 - `defined_on` is auto-derived from git add date of the spec file unless overridden.
 - `status` is manual (`defined`, `in_progress`, `implemented` for features; `open`, `in_progress`, `implemented` for issues).
 - `implemented_on` is manual and should be set when complete.
+
+Issue/Feature traceability rule:
+
+- Every open issue should reference implementing feature(s) in a `## Linked Features` section.
+- Every feature that addresses known issues should reference them in a `## Addresses Issues` section.
+- Mark an issue as `implemented` only after linked feature implementation is complete and the issue done criteria are validated.

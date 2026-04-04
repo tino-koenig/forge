@@ -1,0 +1,29 @@
+# Config Validation Passes While Provider-Required Fields Are Missing
+
+## Problem
+
+`config_validation` can pass even when provider-required fields are missing (for example `openai_compatible` without `base_url`/`model`).
+
+## Evidence
+
+- `forge init --template balanced` creates config with `provider=openai_compatible` but without `base_url`/`model`.
+- `doctor` shows:
+  - `config_validation: pass`
+  - `llm_base_url: fail`
+  - `llm_model: fail`
+- This splits validation semantics and weakens clarity of config health.
+
+## Required behavior
+
+- Provider-required field checks should be integrated into config validation semantics (or a clearly separated mandatory check group with consistent status impact).
+- Validation status must not communicate "pass" when required provider fields are absent.
+
+## Done criteria
+
+- Missing provider-required fields fail config validation (or equivalent mandatory group) deterministically.
+- `doctor` and `config validate` report consistent validation outcomes and messaging.
+- Regression tests cover initialized-config and explicit-missing-field cases.
+
+## Linked Features
+
+- [Feature 104 - Mandatory Provider Field Validation Harmonization](/Users/tino/PhpstormProjects/forge/docs/features/104-mandatory-provider-field-validation-harmonization.md)

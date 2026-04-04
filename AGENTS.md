@@ -77,6 +77,16 @@ Do not prematurely optimize for full autonomy.
 - Avoid hidden control flow where possible.
 - Make it easy to understand how a mode works from reading the code.
 
+### Code readability and maintainability
+- Prefer code that looks like careful human project code, not generated code.
+- Reuse existing repo patterns before introducing new helpers, abstractions, or layers.
+- Prefer straightforward control flow and explicit data movement over compact cleverness.
+- Keep functions small, purpose-specific, and easy to test.
+- Use names that describe domain intent, not temporary implementation detail.
+- Avoid speculative generalization, one-off abstractions, and "future-proofing" without a current need.
+- Comments should explain intent, constraints, or non-obvious decisions — not restate the code.
+- When several valid implementations exist, choose the one that is easiest for a human maintainer to read six months later.
+
 ### CLI design
 - Prefer explicit subcommands such as `forge query`, `forge review`, `forge test`, `forge describe`.
 - Do not make a generic `run everything` style command the primary interface.
@@ -87,6 +97,23 @@ Do not prematurely optimize for full autonomy.
 - Basic tools should remain useful on their own.
 - Favor transparent tool pipelines such as search → read → analyze → answer.
 - Avoid turning core functionality into an opaque agent loop too early.
+
+
+### Change discipline
+- Prefer narrow, well-scoped changes over broad rewrites.
+- Touch the minimum number of files necessary to deliver the feature correctly.
+- Avoid incidental renames, drive-by refactors, or style-only churn unless they are required for the task.
+- Keep diffs reviewable and easy to map to the requested behavior.
+- Before introducing a new shared component, helper, or abstraction, check whether an existing one can be reused directly.
+
+### Change strategy by work type
+- For issue and bugfix work, prefer the smallest correct change that fixes the problem.
+- For issue and bugfix work, fix first; do not bundle broad refactors into the same change unless they are required for correctness or safety.
+- For issue and bugfix work, minimize blast radius and avoid touching unrelated parts of the system.
+- For feature work, prefer focused implementation, but allow structural changes when they clearly improve the feature fit, consistency, or maintainability.
+- Do not use a feature as a pretext for unrelated large-scale rewrites.
+- If a feature requires a broader refactor, keep the reason explicit and limit the change strictly to what the feature needs.
+- Features may reshape local structure, but must preserve reviewability and clear scope.
 
 ### Configuration and profiles
 - Keep default behavior useful with little or no configuration.
@@ -124,8 +151,12 @@ When working in this repository:
 - preserve clarity over cleverness
 - avoid unnecessary framework layers
 - avoid introducing hidden automation
-- prefer readable code and straightforward control flow
-- keep future extensibility, but do not overengineer
+- prefer readable, human-maintainable code over compressed or overly abstract code
+- follow existing repository patterns before inventing new ones
+- keep control flow straightforward and inspectable
+- keep functions and modules focused on one responsibility
+- avoid speculative extensibility and overengineering
+- keep diffs narrow and directly related to the requested change
 
 When adding new functionality:
 1. keep the user-facing mode clear
@@ -133,6 +164,26 @@ When adding new functionality:
 3. keep the implementation easy to inspect
 4. keep the defaults useful
 5. keep configuration optional and secondary
+
+### Delivery standard for coding agents
+Before finalizing a change, verify that:
+- the result matches an existing repo style or intentionally extends it in a consistent way
+- naming is specific and understandable without extra explanation
+- the change does not introduce abstraction that is only used once without a strong reason
+- comments explain why when needed, not what the code obviously does
+- the diff is small enough that a human reviewer can understand it quickly
+- the final code would still feel reasonable if no AI tooling had been involved
+
+## Decision standard
+
+When multiple implementation options are possible, prefer the option that best satisfies this order:
+1. clarity for a human reader
+2. consistency with existing repo patterns
+3. explicit and inspectable behavior
+4. small, reviewable diff size
+5. extensibility only where it serves an immediate need
+
+Do not choose a more abstract design merely because it appears more flexible.
 
 ### Change tracking (mandatory)
 - Every implementation change must be mapped to at least one Feature ID (`docs/features/...`) or Issue ID (`docs/issues/...`).
@@ -165,7 +216,7 @@ A successful Forge change should make the project:
 ## Short reminder
 
 Forge is a transparent repo tool with AI assistance.
-It should help with real repository work from analysis to implementation.
+It should help with real repository work from analysis to implementation, while keeping both behavior and code understandable to humans.
 It should remain understandable by humans at every stage.
 
 **With control, not magic.**
