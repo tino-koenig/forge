@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from difflib import get_close_matches
 from pathlib import Path
 import os
@@ -108,6 +109,9 @@ DEFAULT_QUERY_ORCHESTRATOR_MAX_ITERATIONS = 2
 DEFAULT_QUERY_ORCHESTRATOR_MAX_FILES = 8
 DEFAULT_QUERY_ORCHESTRATOR_MAX_TOKENS = 1200
 DEFAULT_QUERY_ORCHESTRATOR_MAX_WALL_TIME_MS = 2500
+DEFAULT_LOGS_PROTOCOL_MAX_FILE_SIZE_BYTES = 5_000_000
+DEFAULT_LOGS_PROTOCOL_MAX_EVENT_AGE_DAYS = 30
+DEFAULT_LOGS_PROTOCOL_MAX_EVENTS_COUNT = 50_000
 
 
 @dataclass(frozen=True)
@@ -148,6 +152,15 @@ class ResolvedLLMConfig:
     pricing_currency: str
     source: dict[str, str]
     validation_error: str | None = None
+
+
+@dataclass(frozen=True)
+class ResolvedProtocolLogConfig:
+    max_file_size_bytes: int
+    max_event_age_days: int
+    max_events_count: int
+    allow_full_prompt_until: datetime | None
+    source: dict[str, str]
 
 
 def _load_toml(path: Path) -> dict[str, Any]:
@@ -236,6 +249,23 @@ def _normalize_output_language(value: Any) -> str:
         if not (1 <= len(part) <= 8 and part.isalnum()):
             return "invalid"
     return "-".join(parts)
+
+
+def _parse_iso_utc(value: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip()
+    if not candidate:
+        return None
+    if candidate.endswith("Z"):
+        candidate = candidate[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(candidate)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _collect_schema_paths(schema: dict[str, Any], prefix: str = "") -> set[str]:
@@ -797,4 +827,59 @@ def resolve_llm_config(args, repo_root: Path) -> ResolvedLLMConfig:
         pricing_currency=pricing_currency,
         source=source,
         validation_error=validation_error,
+    )
+
+
+def resolve_protocol_log_config(repo_root: Path) -> ResolvedProtocolLogConfig:
+    config_path = repo_root / ".forge" / "config.toml"
+    local_config_path = repo_root / ".forge" / "config.local.toml"
+    payload = _load_toml(config_path)
+    local_payload = _load_toml(local_config_path)
+    source: dict[str, str] = {}
+
+    max_file_size_raw, source["max_file_size_bytes"] = _first_non_none(
+        [
+            ("toml_local", _nested_get(local_payload, "logs.protocol.max_file_size_bytes")),
+            ("toml", _nested_get(payload, "logs.protocol.max_file_size_bytes")),
+            ("default", DEFAULT_LOGS_PROTOCOL_MAX_FILE_SIZE_BYTES),
+        ]
+    )
+    max_event_age_raw, source["max_event_age_days"] = _first_non_none(
+        [
+            ("toml_local", _nested_get(local_payload, "logs.protocol.max_event_age_days")),
+            ("toml", _nested_get(payload, "logs.protocol.max_event_age_days")),
+            ("default", DEFAULT_LOGS_PROTOCOL_MAX_EVENT_AGE_DAYS),
+        ]
+    )
+    max_events_count_raw, source["max_events_count"] = _first_non_none(
+        [
+            ("toml_local", _nested_get(local_payload, "logs.protocol.max_events_count")),
+            ("toml", _nested_get(payload, "logs.protocol.max_events_count")),
+            ("default", DEFAULT_LOGS_PROTOCOL_MAX_EVENTS_COUNT),
+        ]
+    )
+    allow_prompt_raw, source["allow_full_prompt_until"] = _first_non_none(
+        [
+            ("toml_local", _nested_get(local_payload, "logs.protocol.allow_full_prompt_until")),
+            ("toml", _nested_get(payload, "logs.protocol.allow_full_prompt_until")),
+        ]
+    )
+
+    max_file_size_bytes = _int_or_default(max_file_size_raw, DEFAULT_LOGS_PROTOCOL_MAX_FILE_SIZE_BYTES)
+    max_event_age_days = _int_or_default(max_event_age_raw, DEFAULT_LOGS_PROTOCOL_MAX_EVENT_AGE_DAYS)
+    max_events_count = _int_or_default(max_events_count_raw, DEFAULT_LOGS_PROTOCOL_MAX_EVENTS_COUNT)
+    if max_file_size_bytes < 1024:
+        max_file_size_bytes = 1024
+    if max_event_age_days < 1:
+        max_event_age_days = 1
+    if max_events_count < 100:
+        max_events_count = 100
+    allow_full_prompt_until = _parse_iso_utc(allow_prompt_raw)
+
+    return ResolvedProtocolLogConfig(
+        max_file_size_bytes=max_file_size_bytes,
+        max_event_age_days=max_event_age_days,
+        max_events_count=max_events_count,
+        allow_full_prompt_until=allow_full_prompt_until,
+        source=source,
     )

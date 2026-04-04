@@ -2175,6 +2175,43 @@ def gate_protocol_log_storage_jsonl(repo_root: Path) -> None:
     )
 
 
+def gate_protocol_log_config_local_precedence(repo_root: Path) -> None:
+    forge_dir = repo_root / ".forge"
+    forge_dir.mkdir(parents=True, exist_ok=True)
+    (forge_dir / "config.toml").write_text(
+        "[logs.protocol]\n"
+        "max_file_size_bytes = 500000\n"
+        "max_event_age_days = 3650\n"
+        "max_events_count = 1000\n",
+        encoding="utf-8",
+    )
+    (forge_dir / "config.local.toml").write_text(
+        "[logs.protocol]\n"
+        "max_events_count = 100\n",
+        encoding="utf-8",
+    )
+    for idx in range(20):
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--llm-provider",
+                "mock",
+                "--repo-root",
+                str(repo_root),
+                "query",
+                f"compute_price_local_{idx}",
+            ],
+            cwd=ROOT,
+        )
+    events_file = repo_root / ".forge" / "logs" / "events.jsonl"
+    lines = [line for line in events_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert_true(
+        len(lines) <= 100,
+        "protocol log precedence: config.local max_events_count should override config.toml",
+    )
+
+
 def gate_logs_viewer_and_run_focused_inspection(repo_root: Path) -> None:
     run_cmd(
         [
@@ -3061,6 +3098,7 @@ def run_all_gates() -> None:
         temp_repo_malformed = Path(temp_dir) / "repo-malformed"
         temp_repo_unknown_cfg = Path(temp_dir) / "repo-unknown-cfg"
         temp_repo_provider_required = Path(temp_dir) / "repo-provider-required"
+        temp_repo_protocol_local = Path(temp_dir) / "repo-protocol-local"
         temp_repo_promptfail = Path(temp_dir) / "repo-promptfail"
         temp_repo_rules = Path(temp_dir) / "repo-rules"
         temp_repo_rules_invalid = Path(temp_dir) / "repo-rules-invalid"
@@ -3070,6 +3108,7 @@ def run_all_gates() -> None:
         shutil.copytree(FIXTURE_MALFORMED_SRC, temp_repo_malformed)
         shutil.copytree(FIXTURE_BASIC_SRC, temp_repo_unknown_cfg)
         shutil.copytree(FIXTURE_BASIC_SRC, temp_repo_provider_required)
+        shutil.copytree(FIXTURE_BASIC_SRC, temp_repo_protocol_local)
         shutil.copytree(FIXTURE_BASIC_SRC, temp_repo_promptfail)
         shutil.copytree(FIXTURE_BASIC_SRC, temp_repo_rules)
         shutil.copytree(FIXTURE_BASIC_SRC, temp_repo_rules_invalid)
@@ -3119,6 +3158,7 @@ def run_all_gates() -> None:
         gate_from_run_references(temp_repo)
         gate_run_history_contract_always_persisted(temp_repo)
         gate_protocol_log_storage_jsonl(temp_repo)
+        gate_protocol_log_config_local_precedence(temp_repo_protocol_local)
         gate_logs_viewer_and_run_focused_inspection(temp_repo)
         gate_log_filtering_and_llm_query_analytics(temp_repo)
         gate_protocol_log_redaction_privacy_guards(temp_repo)

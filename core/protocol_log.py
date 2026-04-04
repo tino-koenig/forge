@@ -11,12 +11,17 @@ from pathlib import Path
 import re
 from typing import Any
 
-import tomli
+from core.config import (
+    DEFAULT_LOGS_PROTOCOL_MAX_EVENT_AGE_DAYS,
+    DEFAULT_LOGS_PROTOCOL_MAX_EVENTS_COUNT,
+    DEFAULT_LOGS_PROTOCOL_MAX_FILE_SIZE_BYTES,
+    resolve_protocol_log_config,
+)
 
 
-DEFAULT_MAX_FILE_SIZE_BYTES = 5_000_000
-DEFAULT_MAX_EVENT_AGE_DAYS = 30
-DEFAULT_MAX_EVENTS_COUNT = 50_000
+DEFAULT_MAX_FILE_SIZE_BYTES = DEFAULT_LOGS_PROTOCOL_MAX_FILE_SIZE_BYTES
+DEFAULT_MAX_EVENT_AGE_DAYS = DEFAULT_LOGS_PROTOCOL_MAX_EVENT_AGE_DAYS
+DEFAULT_MAX_EVENTS_COUNT = DEFAULT_LOGS_PROTOCOL_MAX_EVENTS_COUNT
 DEFAULT_MAX_TEXT_LEN = 600
 
 _SENSITIVE_KEY_FRAGMENTS = (
@@ -47,61 +52,13 @@ def events_log_path(repo_root: Path) -> Path:
     return repo_root / ".forge" / "logs" / "events.jsonl"
 
 
-def _safe_int(value: Any, default: int) -> int:
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        return default
-    return parsed
-
-
 def _read_protocol_log_config(repo_root: Path) -> ProtocolLogConfig:
-    path = repo_root / ".forge" / "config.toml"
-    if not path.exists():
-        return ProtocolLogConfig(
-            max_file_size_bytes=DEFAULT_MAX_FILE_SIZE_BYTES,
-            max_event_age_days=DEFAULT_MAX_EVENT_AGE_DAYS,
-            max_events_count=DEFAULT_MAX_EVENTS_COUNT,
-            allow_full_prompt_until=None,
-        )
-    try:
-        payload = tomli.loads(path.read_text(encoding="utf-8"))
-    except (OSError, tomli.TOMLDecodeError):
-        return ProtocolLogConfig(
-            max_file_size_bytes=DEFAULT_MAX_FILE_SIZE_BYTES,
-            max_event_age_days=DEFAULT_MAX_EVENT_AGE_DAYS,
-            max_events_count=DEFAULT_MAX_EVENTS_COUNT,
-            allow_full_prompt_until=None,
-        )
-
-    logs = payload.get("logs") if isinstance(payload, dict) else None
-    protocol = logs.get("protocol") if isinstance(logs, dict) else None
-    if not isinstance(protocol, dict):
-        return ProtocolLogConfig(
-            max_file_size_bytes=DEFAULT_MAX_FILE_SIZE_BYTES,
-            max_event_age_days=DEFAULT_MAX_EVENT_AGE_DAYS,
-            max_events_count=DEFAULT_MAX_EVENTS_COUNT,
-            allow_full_prompt_until=None,
-        )
-
-    max_file_size_bytes = _safe_int(protocol.get("max_file_size_bytes"), DEFAULT_MAX_FILE_SIZE_BYTES)
-    max_event_age_days = _safe_int(protocol.get("max_event_age_days"), DEFAULT_MAX_EVENT_AGE_DAYS)
-    max_events_count = _safe_int(protocol.get("max_events_count"), DEFAULT_MAX_EVENTS_COUNT)
-    allow_full_prompt_until_raw = protocol.get("allow_full_prompt_until")
-
-    if max_file_size_bytes < 1024:
-        max_file_size_bytes = 1024
-    if max_event_age_days < 1:
-        max_event_age_days = 1
-    if max_events_count < 100:
-        max_events_count = 100
-
-    allow_full_prompt_until = _parse_iso_utc(allow_full_prompt_until_raw)
+    resolved = resolve_protocol_log_config(repo_root)
     return ProtocolLogConfig(
-        max_file_size_bytes=max_file_size_bytes,
-        max_event_age_days=max_event_age_days,
-        max_events_count=max_events_count,
-        allow_full_prompt_until=allow_full_prompt_until,
+        max_file_size_bytes=resolved.max_file_size_bytes,
+        max_event_age_days=resolved.max_event_age_days,
+        max_events_count=resolved.max_events_count,
+        allow_full_prompt_until=resolved.allow_full_prompt_until,
     )
 
 
