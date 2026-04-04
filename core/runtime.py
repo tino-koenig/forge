@@ -12,6 +12,7 @@ from modes.doctor import run as run_doctor
 from modes.explain import run as run_explain
 from modes.index import run as run_index
 from modes.init import run as run_init
+from modes.logs import run as run_logs
 from modes.query import run as run_query
 from modes.review import run as run_review
 from modes.runs import run as run_runs
@@ -29,6 +30,7 @@ HANDLERS = {
     Capability.TEST: run_test,
     Capability.DOCTOR: run_doctor,
     Capability.RUNS: run_runs,
+    Capability.LOGS: run_logs,
 }
 
 

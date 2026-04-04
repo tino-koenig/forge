@@ -22,6 +22,7 @@ REQUIRES_PAYLOAD = {
     "index": False,
     "doctor": False,
     "runs": False,
+    "logs": False,
     "query": True,
     "explain": True,
     "review": True,
@@ -244,6 +245,13 @@ def build_parser() -> argparse.ArgumentParser:
             "Examples: list | last | show <id> [compact|standard|full] | "
             "<id> show [view] | <id> rerun | prune"
         ),
+    )
+
+    logs_parser = subparsers.add_parser("logs", help="Inspect protocol events timeline")
+    logs_parser.add_argument(
+        "parts",
+        nargs="*",
+        help="Examples: tail [count] | run <run_id> | show <event_id>",
     )
 
     query_parser = subparsers.add_parser("query", help="Run query capability")
@@ -593,7 +601,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     )
 
-    if capability_name != "runs":
+    if capability_name not in {"runs", "logs"}:
         assembly_started = time.perf_counter()
         text_output = stdout_capture.getvalue()
         contract_payload = consume_last_contract()

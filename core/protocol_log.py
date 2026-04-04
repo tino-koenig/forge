@@ -92,6 +92,22 @@ def _parse_event_line(raw: str) -> dict[str, object] | None:
     return parsed
 
 
+def load_protocol_events(repo_root: Path) -> list[dict[str, object]]:
+    path = events_log_path(repo_root)
+    if not path.exists():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    events: list[dict[str, object]] = []
+    for raw in lines:
+        parsed = _parse_event_line(raw)
+        if parsed is not None:
+            events.append(parsed)
+    return events
+
+
 def _parse_iso_utc(value: object) -> datetime | None:
     if not isinstance(value, str):
         return None

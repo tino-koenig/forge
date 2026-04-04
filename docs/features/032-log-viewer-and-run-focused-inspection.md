@@ -59,3 +59,38 @@ Protocol logging is only useful if users can inspect it quickly during real trou
 - log viewer commands exist and are documented
 - run-focused view is chronological and useful for debugging
 - JSON output supports automation
+
+## Implemented Behavior (Current)
+
+- Implementation status: implemented.
+- Traceability: `CHANGELOG.md` references feature 032; status/implemented date are tracked in `docs/status/features-index.md`.
+- Added command family:
+  - `forge logs tail [count]`
+  - `forge logs run <run_id>`
+  - `forge logs show <event_id>`
+- Viewer reads protocol events from `.forge/logs/events.jsonl` (read-only).
+- Supports text and JSON output:
+  - text: human-first timeline
+  - json: structured contract with timeline/event payloads
+- `logs run <run_id>` exposes:
+  - ordered timeline
+  - step status + duration
+  - summary totals (`total_duration_ms`, `llm_step_count`, `fallback_count`, `failed_count`)
+  - problematic step slice (`failed|fallback`)
+
+## How To Validate Quickly
+
+- Create events:
+  - `forge --llm-provider mock query "compute_price"`
+- Tail:
+  - `forge logs tail`
+- Run-focused timeline:
+  - `forge --output-format json runs last`
+  - `forge logs run <run_id>`
+- Single event:
+  - `forge logs show <event_id>`
+
+## Known Limits / Notes
+
+- Filtering by capability/time range is not yet exposed as dedicated flags (tail/run/show form only).
+- Viewer tolerates malformed JSONL lines by skipping invalid entries.

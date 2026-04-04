@@ -1288,6 +1288,82 @@ def gate_protocol_log_storage_jsonl(repo_root: Path) -> None:
     )
 
 
+def gate_logs_viewer_and_run_focused_inspection(repo_root: Path) -> None:
+    run_cmd(
+        [
+            "python3",
+            str(FORGE),
+            "--llm-provider",
+            "mock",
+            "--repo-root",
+            str(repo_root),
+            "query",
+            "compute_price",
+        ],
+        cwd=ROOT,
+    )
+
+    last_payload = parse_json_output(
+        run_cmd(
+            ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "runs", "last"],
+            cwd=ROOT,
+        ).stdout
+    )
+    run_id = int(last_payload.get("id", 0))
+    assert_true(run_id > 0, "logs viewer: expected concrete run id from runs last")
+
+    tail_payload = parse_json_output(
+        run_cmd(
+            ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "logs", "tail", "10"],
+            cwd=ROOT,
+        ).stdout
+    )
+    tail_sections = tail_payload.get("sections", {})
+    tail_events = tail_sections.get("events", [])
+    assert_true(isinstance(tail_events, list), "logs viewer: logs tail should return sections.events list")
+    assert_true(bool(tail_events), "logs viewer: logs tail should include at least one event")
+
+    run_payload = parse_json_output(
+        run_cmd(
+            ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo_root), "logs", "run", str(run_id)],
+            cwd=ROOT,
+        ).stdout
+    )
+    run_sections = run_payload.get("sections", {})
+    assert_true(run_sections.get("run_id") == run_id, "logs viewer: logs run should return matching run_id")
+    timeline = run_sections.get("timeline", [])
+    totals = run_sections.get("totals", {})
+    assert_true(isinstance(timeline, list) and bool(timeline), "logs viewer: logs run should provide timeline")
+    assert_true(isinstance(totals, dict), "logs viewer: logs run should provide totals")
+    assert_true("llm_step_count" in totals, "logs viewer: logs run totals should include llm_step_count")
+    assert_true("fallback_count" in totals, "logs viewer: logs run totals should include fallback_count")
+
+    first_event_id = str(timeline[0].get("event_id", ""))
+    assert_true(bool(first_event_id), "logs viewer: timeline event should include event_id")
+    show_payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "logs",
+                "show",
+                first_event_id,
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    show_sections = show_payload.get("sections", {})
+    shown_event = show_sections.get("event", {})
+    assert_true(
+        isinstance(shown_event, dict) and shown_event.get("event_id") == first_event_id,
+        "logs viewer: logs show should return selected event",
+    )
+
+
 def gate_evidence_quality(repo_root: Path) -> None:
     query_payload = parse_json_output(
         run_cmd(
@@ -1911,6 +1987,7 @@ def run_all_gates() -> None:
         gate_from_run_references(temp_repo)
         gate_run_history_contract_always_persisted(temp_repo)
         gate_protocol_log_storage_jsonl(temp_repo)
+        gate_logs_viewer_and_run_focused_inspection(temp_repo)
 
 
 def main() -> int:

@@ -166,7 +166,9 @@ notes = "Added protocol JSONL storage at .forge/logs/events.jsonl with configura
 
 [[feature]]
 id = "032"
-status = "defined"
+status = "implemented"
+implemented_on = "2026-04-04"
+notes = "Added read-only logs viewer commands (tail/run/show) over protocol JSONL with run-focused timeline totals and JSON/text output."
 
 [[feature]]
 id = "033"
