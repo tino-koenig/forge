@@ -754,6 +754,40 @@ def gate_init_non_mutating_flows(repo_root: Path) -> None:
         shutil.rmtree(empty_repo, ignore_errors=True)
 
 
+def gate_init_invalid_target_no_write(repo_root: Path) -> None:
+    base = Path(tempfile.mkdtemp())
+    try:
+        missing_target = base / "missing_repo_root"
+        payload = parse_json_output(
+            run_cmd(
+                [
+                    "python3",
+                    str(FORGE),
+                    "--output-format",
+                    "json",
+                    "--repo-root",
+                    str(missing_target),
+                    "init",
+                    "--non-interactive",
+                    "--template",
+                    "balanced",
+                ],
+                cwd=ROOT,
+                expect_ok=False,
+            ).stdout
+        )
+        assert_true(
+            payload.get("sections", {}).get("status") == "invalid_target",
+            "init invalid-target: expected invalid_target status",
+        )
+        assert_true(
+            not missing_target.exists(),
+            "init invalid-target: failure must not create target directory",
+        )
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
+
+
 def gate_named_session_context_and_ttl(repo_root: Path) -> None:
     query_payload = parse_json_output(
         run_cmd(
@@ -2731,6 +2765,7 @@ def run_all_gates() -> None:
         gate_runtime_settings_foundation(temp_repo)
         gate_runtime_settings_set_get(temp_repo)
         gate_init_non_mutating_flows(temp_repo)
+        gate_init_invalid_target_no_write(temp_repo)
         gate_named_session_context_and_ttl(temp_repo)
         gate_env_file_autoload(temp_repo)
         gate_prompt_profile_policy(temp_repo)

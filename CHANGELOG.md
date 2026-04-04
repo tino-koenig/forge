@@ -39,6 +39,7 @@ All notable changes to Forge should be documented in this file.
 - feature 057: added reusable LLM foundation (`core/llm_foundation.py`) with shared policy/settings/prompt/provider/run-step APIs and integrated delegation from `core/llm_integration.py`
 
 ### Changed
+- feature 113 / issue 50: init invalid-target failures erzeugen keine verzeichnisse oder `.forge`-artefakte mehr; no-write-vertrag ist per gate abgesichert
 - feature 112 / issue 49: init non-mutating and precondition-failure paths (`--list-templates`, `--dry-run`, non-tty interactive) no longer persist run history or create `.forge` marker side effects
 - feature 034: added deterministic protocol-log redaction/privacy guards (secret/token masking, bearer/auth scrubbing, prompt hash+length persistence, and synthetic leak regression gate)
 - feature 033: added `forge logs` filtering (`run-id/capability/step-type/status/time/provider/model`) and persisted-event analytics via `forge logs stats` (counts, p50/p95, slowest steps, fallback rate, provider/model snapshot)

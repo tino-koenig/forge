@@ -57,6 +57,7 @@ REQUIRES_PAYLOAD = {
 FROM_RUN_CAPABILITIES = {"explain", "review", "describe", "test"}
 PROFILE_VALUES = {Profile.SIMPLE.value, Profile.STANDARD.value, Profile.DETAILED.value}
 _INIT_NON_MUTATING_STATUSES = {
+    "invalid_target",
     "templates_listed",
     "dry_run",
     "canceled",
@@ -80,15 +81,15 @@ def _should_persist_run_history(
         return False
     if capability_name != "init":
         return True
-    if exit_code != 0:
-        return False
     if not isinstance(contract_payload, dict):
-        return True
+        return exit_code == 0
     sections = contract_payload.get("sections")
     if not isinstance(sections, dict):
-        return True
+        return exit_code == 0
     status = sections.get("status")
     if isinstance(status, str) and status in _INIT_NON_MUTATING_STATUSES:
+        return False
+    if exit_code != 0:
         return False
     return True
 
