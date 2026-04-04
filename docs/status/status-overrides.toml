@@ -567,6 +567,13 @@ defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Added integrated review quality-gate matrix covering target-resolution, noise-control, orchestrator trace, and rule-interaction regressions."
 
+[[feature]]
+id = "092"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Describe now returns an explicit unresolved-target contract for unresolved explicit payloads while preserving implicit repo overview behavior."
+
 # Issue examples:
 # [[issue]]
 # id = "12"
@@ -742,6 +749,13 @@ status = "implemented"
 defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Review regression suite now includes a dedicated quality-gate matrix for target resolution and noise-sensitive scenarios."
+
+[[issue]]
+id = "35"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Describe no longer falls back to repo summary for unresolved explicit targets and now emits deterministic unresolved-target metadata."
 
 [[issue]]
 id = "6"

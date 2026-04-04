@@ -467,6 +467,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         print(f"Run reference error: {exc}")
         return 1
     request = CommandRequest(capability=request.capability, profile=request.profile, payload=resolved_payload)
+    explicit_target = bool(request.payload.strip())
     target = resolve_describe_target(repo_root, request.payload, session)
     is_json = args.output_format == "json"
     view = resolve_view(args)
@@ -485,6 +486,42 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             print("Index: loaded .forge/index.json")
         elif request.profile in {Profile.STANDARD, Profile.DETAILED}:
             print("Index: not available, scanning repository directly")
+
+    if explicit_target and target.kind == "repo" and target.source == "fallback":
+        summary = "Explicit describe target could not be resolved."
+        uncertainty = [
+            "explicit target did not resolve to a readable path or symbol",
+            "describe did not fallback to repository overview for unresolved explicit target",
+        ]
+        next_step = 'Run: forge query "where is the relevant logic implemented?"'
+        sections = {
+            "target": {"kind": "unresolved", "path": request.payload, "source": "explicit_unresolved"},
+            "important_files": [],
+            "key_components": [],
+            "technologies": {"languages": [], "framework_hints": []},
+            "architecture_notes": [],
+            "status": "unresolved_target",
+        }
+        contract = build_contract(
+            capability=request.capability.value,
+            profile=request.profile.value,
+            summary=summary,
+            evidence=[],
+            uncertainty=uncertainty,
+            next_step=next_step,
+            sections=sections,
+        )
+        if args.output_format == "json":
+            emit_contract_json(contract)
+            return 0
+        print("\n--- Summary ---")
+        print(summary)
+        print("\n--- Uncertainty ---")
+        for note in uncertainty:
+            print(f"- {note}")
+        print("\n--- Next Step ---")
+        print(next_step)
+        return 0
 
     next_step: str | None = None
     llm_settings = resolve_settings(args, repo_root)

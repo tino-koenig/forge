@@ -2959,6 +2959,62 @@ def gate_mixed_fixture_describe(mixed_repo: Path) -> None:
     assert_true("JavaScript" in lang_set, "mixed fixture: expected JavaScript detection")
 
 
+def gate_describe_explicit_unresolved_target_contract(repo_root: Path) -> None:
+    explicit_unresolved = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "describe",
+                "src/does_not_exist.py",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    sections = explicit_unresolved.get("sections", {})
+    target = sections.get("target", {})
+    assert_true(
+        explicit_unresolved.get("summary") == "Explicit describe target could not be resolved.",
+        "describe unresolved: expected explicit unresolved summary",
+    )
+    assert_true(
+        isinstance(target, dict) and target.get("kind") == "unresolved",
+        "describe unresolved: expected target.kind=unresolved for explicit unresolved payload",
+    )
+    assert_true(
+        sections.get("status") == "unresolved_target",
+        "describe unresolved: expected unresolved status marker",
+    )
+    assert_true(
+        explicit_unresolved.get("evidence") == [],
+        "describe unresolved: explicit unresolved payload should not emit repo fallback evidence",
+    )
+
+    implicit_repo = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--repo-root",
+                str(repo_root),
+                "describe",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    implicit_target = implicit_repo.get("sections", {}).get("target", {})
+    assert_true(
+        isinstance(implicit_target, dict) and implicit_target.get("kind") == "repo",
+        "describe unresolved: implicit empty payload must keep repo overview behavior",
+    )
+
+
 def gate_external_review_rules(repo_root: Path) -> None:
     forge_dir = repo_root / ".forge"
     forge_dir.mkdir(parents=True, exist_ok=True)
@@ -5259,6 +5315,7 @@ def run_all_gates() -> None:
         gate_fallback_with_and_without_index(temp_repo)
         gate_frontend_fixture(temp_repo_frontend)
         gate_mixed_fixture_describe(temp_repo_mixed)
+        gate_describe_explicit_unresolved_target_contract(temp_repo)
         gate_doctor_config_validate_matrix_malformed(temp_repo_malformed)
         gate_doctor_config_validate_unknown_keys(temp_repo_unknown_cfg)
         gate_doctor_config_validate_provider_required_fields(temp_repo_provider_required)

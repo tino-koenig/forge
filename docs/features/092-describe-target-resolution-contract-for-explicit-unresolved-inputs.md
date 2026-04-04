@@ -19,3 +19,24 @@ Define deterministic describe behavior for explicit targets that cannot be resol
 - Explicit unresolved targets do not yield repo fallback summaries.
 - Implicit empty payload still yields repo overview.
 - Regression tests cover both paths.
+
+## Implemented Behavior (Current)
+
+- Describe now distinguishes explicit unresolved payloads from implicit repo-overview invocation.
+- For explicit unresolved targets, describe returns deterministic unresolved output:
+  - `sections.target.kind = "unresolved"`
+  - `sections.status = "unresolved_target"`
+  - no repository fallback evidence
+- Implicit empty payload (`forge describe`) still resolves to repository overview (`target.kind = "repo"`).
+- Added regression gate `gate_describe_explicit_unresolved_target_contract`.
+
+## How To Validate Quickly
+
+- Run:
+  - `python3 scripts/run_quality_gates.py`
+- Verify:
+  - `gate_describe_explicit_unresolved_target_contract` passes.
+
+## Known Limits / Notes
+
+- This contract applies specifically to explicit unresolved describe inputs; other mode resolution semantics remain mode-specific.

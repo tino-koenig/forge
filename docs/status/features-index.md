@@ -101,7 +101,7 @@ Status values:
 | 089 | Related-Target Retrieval Foundation for Review and Explain | 2026-04-04 | implemented | 2026-04-04 | [089-related-target-retrieval-foundation-for-review-and-explain.md](/Users/tino/PhpstormProjects/forge/docs/features/089-related-target-retrieval-foundation-for-review-and-explain.md) |
 | 090 | Review Adoption of Central Mode Orchestrator | 2026-04-04 | implemented | 2026-04-04 | [090-review-adoption-of-central-mode-orchestrator.md](/Users/tino/PhpstormProjects/forge/docs/features/090-review-adoption-of-central-mode-orchestrator.md) |
 | 091 | Review Quality Gate Matrix Extension | 2026-04-04 | implemented | 2026-04-04 | [091-review-quality-gate-matrix-extension.md](/Users/tino/PhpstormProjects/forge/docs/features/091-review-quality-gate-matrix-extension.md) |
-| 092 | Describe Target Resolution Contract for Explicit Unresolved Inputs | 2026-04-04 | defined | - | [092-describe-target-resolution-contract-for-explicit-unresolved-inputs.md](/Users/tino/PhpstormProjects/forge/docs/features/092-describe-target-resolution-contract-for-explicit-unresolved-inputs.md) |
+| 092 | Describe Target Resolution Contract for Explicit Unresolved Inputs | 2026-04-04 | implemented | 2026-04-04 | [092-describe-target-resolution-contract-for-explicit-unresolved-inputs.md](/Users/tino/PhpstormProjects/forge/docs/features/092-describe-target-resolution-contract-for-explicit-unresolved-inputs.md) |
 | 093 | Describe Symbol-Anchor Evidence Contract | 2026-04-04 | defined | - | [093-describe-symbol-anchor-evidence-contract.md](/Users/tino/PhpstormProjects/forge/docs/features/093-describe-symbol-anchor-evidence-contract.md) |
 | 094 | Describe Important-File Ranking Scope Policy | 2026-04-04 | defined | - | [094-describe-important-file-ranking-scope-policy.md](/Users/tino/PhpstormProjects/forge/docs/features/094-describe-important-file-ranking-scope-policy.md) |
 | 095 | Describe Adoption of Central Mode Orchestrator | 2026-04-04 | defined | - | [095-describe-adoption-of-central-mode-orchestrator.md](/Users/tino/PhpstormProjects/forge/docs/features/095-describe-adoption-of-central-mode-orchestrator.md) |
@@ -192,6 +192,7 @@ Status values:
 - 089: Review and explain now share a weighted related-target ranking foundation and expose relation rationale metadata in output contracts.
 - 090: Review now exposes central orchestrator trace/runtime metadata under action_orchestration using the shared mode orchestrator engine.
 - 091: Added integrated review quality-gate matrix covering target-resolution, noise-control, orchestrator trace, and rule-interaction regressions.
+- 092: Describe now returns an explicit unresolved-target contract for unresolved explicit payloads while preserving implicit repo overview behavior.
 - 111: Extracted reusable protocol analytics/filtering foundation from logs mode and added direct foundation gate coverage.
 - 115: Expanded init gate matrix to lock non-mutating safety, overwrite/force contract, template-output contract, and onboarding coherence.
 - 116: Centralized init template/option registry and derived CLI/mode choices from shared init foundation with parser drift gate.
