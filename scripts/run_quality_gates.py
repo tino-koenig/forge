@@ -449,10 +449,20 @@ def gate_config_precedence(repo_root: Path) -> None:
     )
     usage = payload.get("sections", {}).get("llm_usage", {})
     assert_true(usage.get("used") is True, "precedence test should still use provider")
-    assert_true(usage.get("model") == "model-from-cli", "CLI model must override env and TOML")
-    sources = usage.get("config_source", {})
-    assert_true(sources.get("model") == "cli", "model source should be cli")
-    assert_true(sources.get("base_url") == "toml", "base_url source should be toml")
+    planner_usage = payload.get("sections", {}).get("query_planner", {}).get("usage", {})
+    assert_true(
+        planner_usage.get("model") == "model-from-cli",
+        "CLI model must override env and TOML for planner stage",
+    )
+    assert_true(
+        planner_usage.get("provider") == "openai_compatible",
+        "provider should resolve from TOML as openai_compatible",
+    )
+    orchestrator_usage = payload.get("sections", {}).get("action_orchestration", {}).get("usage", {})
+    assert_true(
+        orchestrator_usage.get("model") == "model-from-cli",
+        "CLI model must override env and TOML for orchestrator stage",
+    )
 
 
 def gate_runtime_settings_foundation(repo_root: Path) -> None:
