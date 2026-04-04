@@ -83,7 +83,7 @@ Status values:
 | 071 | Graph Health and Debug Surface | 2026-04-04 | defined | - | [071-graph-health-and-debug-surface.md](/Users/tino/PhpstormProjects/forge/docs/features/071-graph-health-and-debug-surface.md) |
 | 072 | Ask Web Access Policy and Settings Integration | 2026-04-04 | implemented | 2026-04-04 | [072-ask-web-access-policy-and-settings-integration.md](/Users/tino/PhpstormProjects/forge/docs/features/072-ask-web-access-policy-and-settings-integration.md) |
 | 073 | Ask Latest Freshness Policy | 2026-04-04 | implemented | 2026-04-04 | [073-ask-latest-freshness-policy.md](/Users/tino/PhpstormProjects/forge/docs/features/073-ask-latest-freshness-policy.md) |
-| 074 | Source-Aware Provenance Contract | 2026-04-04 | defined | - | [074-source-aware-provenance-contract.md](/Users/tino/PhpstormProjects/forge/docs/features/074-source-aware-provenance-contract.md) |
+| 074 | Source-Aware Provenance Contract | 2026-04-04 | implemented | 2026-04-04 | [074-source-aware-provenance-contract.md](/Users/tino/PhpstormProjects/forge/docs/features/074-source-aware-provenance-contract.md) |
 | 075 | Ask and Web Quality Gates | 2026-04-04 | defined | - | [075-ask-and-web-quality-gates.md](/Users/tino/PhpstormProjects/forge/docs/features/075-ask-and-web-quality-gates.md) |
 | 076 | Ask/Query Boundary Cleanup | 2026-04-04 | defined | - | [076-ask-query-boundary-cleanup.md](/Users/tino/PhpstormProjects/forge/docs/features/076-ask-query-boundary-cleanup.md) |
 | 077 | Query Token-Aware Matching and Exact-Term Retrieval Contract | 2026-04-04 | implemented | 2026-04-04 | [077-query-token-aware-matching-and-exact-term-retrieval-contract.md](/Users/tino/PhpstormProjects/forge/docs/features/077-query-token-aware-matching-and-exact-term-retrieval-contract.md) |
@@ -174,6 +174,7 @@ Status values:
 - 068: Query now runs deterministic symbol-first resolution for definition/location intents with explicit symbol-stage evidence and output metadata.
 - 072: Ask web presets now enforce runtime access.web gating with explicit policy-block metadata and regression coverage.
 - 073: ask:latest now applies distinct freshness-mode query strategy and exposes freshness signals in output contracts.
+- 074: Provenance helper is now source-aware; ask emits correct web/none evidence-source categories.
 - 077: Query content retrieval now uses boundary-aware token matching instead of naive substring checks, with regression coverage for identifier-location queries.
 - 078: Planner lead/support priority is now transparently transferred to deterministic retrieval order with observable effective terms and weights in query output.
 - 079: Added central bounded orchestration foundation in core and wired reuse in query and explain modes.

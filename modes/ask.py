@@ -273,6 +273,13 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         "provenance": provenance_section(
             llm_used=bool(llm_outcome.usage.get("used")),
             evidence_count=len(search_evidence),
+            evidence_source=(
+                "web_retrieval"
+                if retrieval_outcome is not None and retrieval_outcome.used and bool(search_evidence)
+                else "web_search"
+                if search_outcome is not None and search_outcome.used and bool(search_evidence)
+                else "none"
+            ),
         ),
     }
     next_step = (

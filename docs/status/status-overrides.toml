@@ -469,6 +469,13 @@ defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "ask:latest now applies distinct freshness-mode query strategy and exposes freshness signals in output contracts."
 
+[[feature]]
+id = "074"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Provenance helper is now source-aware; ask emits correct web/none evidence-source categories."
+
 # Issue examples:
 # [[issue]]
 # id = "12"
@@ -539,6 +546,13 @@ status = "implemented"
 defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "ask:latest now diverges from ask:docs via freshness_mode policy and recency-aware query variants with explicit freshness contract metadata."
+
+[[issue]]
+id = "15"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Ask provenance now reports source-aware web/none evidence-source values instead of hardcoded repository_artifacts."
 
 [[issue]]
 id = "6"

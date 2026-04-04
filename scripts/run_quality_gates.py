@@ -2172,6 +2172,64 @@ def gate_ask_latest_freshness_policy(repo_root: Path) -> None:
     )
 
 
+def gate_ask_source_aware_provenance(repo_root: Path) -> None:
+    forge_dir = repo_root / ".forge"
+    forge_dir.mkdir(parents=True, exist_ok=True)
+    (forge_dir / "runtime.toml").write_text('"access.web" = false\n', encoding="utf-8")
+    blocked = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--llm-provider",
+                "mock",
+                "--repo-root",
+                str(repo_root),
+                "ask:docs",
+                "typo3",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    blocked_prov = blocked.get("sections", {}).get("provenance", {})
+    assert_true(
+        blocked_prov.get("evidence_source") == "none",
+        "ask provenance: expected evidence_source=none when web access is blocked and no evidence exists",
+    )
+
+    (forge_dir / "runtime.toml").write_text('"access.web" = true\n', encoding="utf-8")
+    docs = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--llm-provider",
+                "mock",
+                "--repo-root",
+                str(repo_root),
+                "ask:docs",
+                "typo3",
+                "manual",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    docs_sections = docs.get("sections", {})
+    docs_prov = docs_sections.get("provenance", {})
+    docs_ask = docs_sections.get("ask", {})
+    retrieval = docs_ask.get("retrieval", {}) if isinstance(docs_ask, dict) else {}
+    search = docs_ask.get("search", {}) if isinstance(docs_ask, dict) else {}
+    expected = "web_retrieval" if isinstance(retrieval, dict) and retrieval.get("used") else "web_search" if isinstance(search, dict) and search.get("used") else "none"
+    assert_true(
+        docs_prov.get("evidence_source") == expected,
+        "ask provenance: expected source-aware evidence_source classification",
+    )
+
+
 def gate_query_planner_success(repo_root: Path) -> None:
     payload = parse_json_output(
         run_cmd(
@@ -4182,6 +4240,7 @@ def run_all_gates() -> None:
         gate_query_llm_provenance_consistency(temp_repo)
         gate_ask_web_access_policy(temp_repo)
         gate_ask_latest_freshness_policy(temp_repo)
+        gate_ask_source_aware_provenance(temp_repo)
         gate_query_planner_success(temp_repo)
         gate_query_planner_fallback(temp_repo)
         gate_llm_observability_redaction(temp_repo)

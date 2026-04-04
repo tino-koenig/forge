@@ -24,3 +24,23 @@ This reduces auditability and can mislead downstream analytics.
 ## Linked Features
 
 - [074-source-aware-provenance-contract.md](/Users/tino/PhpstormProjects/forge/docs/features/074-source-aware-provenance-contract.md)
+
+## Implemented Behavior (Current)
+
+- Shared provenance helper now supports explicit evidence-source typing.
+- Ask now reports source-aware provenance categories:
+  - `web_retrieval` when retrieval snippets drive evidence
+  - `web_search` when search candidates drive evidence
+  - `none` when no evidence anchors exist
+- Query and other repository-grounded consumers keep repository provenance semantics.
+
+## How To Validate Quickly
+
+- `access.web=false` with ask web preset:
+  - `sections.provenance.evidence_source == "none"`
+- `access.web=true` with ask web preset:
+  - `sections.provenance.evidence_source` reflects actual web evidence channel (`web_search` or `web_retrieval`)
+
+## Known Limits / Notes
+
+- `mixed` provenance category is supported by the shared helper but not yet emitted by ask’s current deterministic evidence selection path.

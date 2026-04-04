@@ -1020,9 +1020,16 @@ def maybe_refine_summary(
     return _finish(refined)
 
 
-def provenance_section(*, llm_used: bool, evidence_count: int) -> dict[str, object]:
+def provenance_section(
+    *,
+    llm_used: bool,
+    evidence_count: int,
+    evidence_source: str = "repository_artifacts",
+) -> dict[str, object]:
+    allowed_sources = {"repository_artifacts", "web_search", "web_retrieval", "mixed", "none"}
+    resolved_source = evidence_source if evidence_source in allowed_sources else "repository_artifacts"
     return {
-        "evidence_source": "repository_artifacts",
+        "evidence_source": resolved_source,
         "evidence_items": evidence_count,
         "inference_source": "deterministic_heuristics+llm" if llm_used else "deterministic_heuristics",
     }
