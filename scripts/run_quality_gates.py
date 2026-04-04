@@ -23,6 +23,9 @@ from core.config import (
     DEFAULT_QUERY_PLANNER_MAX_TERMS,
 )
 from core.capability_model import Capability
+from core.protocol_analytics_foundation import apply_filters as apply_protocol_filters
+from core.protocol_analytics_foundation import build_run_totals as build_protocol_run_totals
+from core.protocol_analytics_foundation import stats_payload as build_protocol_stats_payload
 from core.protocol_log import append_protocol_events
 from forge_cmd.cli import build_parser
 import tomli
@@ -1791,6 +1794,66 @@ def gate_logs_capability_filter_choices_from_model() -> None:
     )
 
 
+def gate_protocol_analytics_foundation_unit() -> None:
+    class Args:
+        logs_run_id = None
+        logs_capability = None
+        logs_step_type = "llm"
+        logs_status = None
+        since = None
+        until = None
+        logs_provider = "mock"
+        logs_model = "forge-mock-v1"
+
+    sample = [
+        {
+            "event_id": "evt-1",
+            "run_id": 1,
+            "timestamp": "2026-01-01T00:00:00+00:00",
+            "capability": "query",
+            "step_name": "query_planner",
+            "step_type": "llm",
+            "status": "completed",
+            "duration_ms": 12,
+            "metadata": {"provider": "mock", "model": "forge-mock-v1"},
+        },
+        {
+            "event_id": "evt-2",
+            "run_id": 1,
+            "timestamp": "2026-01-01T00:00:01+00:00",
+            "capability": "query",
+            "step_name": "query_action_orchestrator",
+            "step_type": "llm",
+            "status": "fallback",
+            "duration_ms": 8,
+            "metadata": {"provider": "mock", "model": "forge-mock-v1"},
+        },
+        {
+            "event_id": "evt-3",
+            "run_id": 1,
+            "timestamp": "2026-01-01T00:00:02+00:00",
+            "capability": "query",
+            "step_name": "output_assembly",
+            "step_type": "io",
+            "status": "completed",
+            "duration_ms": 1,
+            "metadata": {},
+        },
+    ]
+
+    filtered = apply_protocol_filters(sample, Args())
+    assert_true(len(filtered) == 2, "protocol analytics foundation: expected llm/provider/model filtered set")
+    stats = build_protocol_stats_payload(filtered)
+    assert_true(stats.get("event_count") == 2, "protocol analytics foundation: expected stats event_count")
+    assert_true(
+        isinstance(stats.get("counts_by_status"), dict) and stats["counts_by_status"].get("fallback") == 1,
+        "protocol analytics foundation: expected fallback count in stats",
+    )
+    totals = build_protocol_run_totals(filtered)
+    assert_true(totals.get("llm_step_count") == 2, "protocol analytics foundation: expected llm_step_count=2")
+    assert_true(totals.get("fallback_count") == 1, "protocol analytics foundation: expected fallback_count=1")
+
+
 def gate_doctor_config_validate_unknown_keys(repo_root: Path) -> None:
     forge_dir = repo_root / ".forge"
     forge_dir.mkdir(parents=True, exist_ok=True)
@@ -3390,6 +3453,7 @@ def run_all_gates() -> None:
         gate_doctor_config_validate_read_only_sessions(temp_repo)
         gate_index_config_contract_docs()
         gate_logs_capability_filter_choices_from_model()
+        gate_protocol_analytics_foundation_unit()
         gate_external_review_rules(temp_repo_rules)
         gate_external_review_rules_invalid(temp_repo_rules_invalid)
         gate_from_run_references(temp_repo)

@@ -385,6 +385,13 @@ defined_on = "2026-04-04"
 implemented_on = "2026-04-04"
 notes = "Added named repo-local session store with TTL, auto-create on runtime-consuming commands, session command group, revive flow, bounded context retention, and resolver source integration (`session:<name>`)."
 
+[[feature]]
+id = "111"
+status = "implemented"
+defined_on = "2026-04-04"
+implemented_on = "2026-04-04"
+notes = "Extracted reusable protocol analytics/filtering foundation from logs mode and added direct foundation gate coverage."
+
 # Issue examples:
 # [[issue]]
 # id = "12"
