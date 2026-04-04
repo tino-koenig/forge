@@ -945,6 +945,56 @@ def gate_init_default_alignment_with_config_foundation(repo_root: Path) -> None:
     )
 
 
+def gate_init_doctor_provider_baseline_coherence() -> None:
+    templates = ("balanced", "strict-review", "lightweight")
+    for template_id in templates:
+        repo = Path(tempfile.mkdtemp(prefix=f"forge-init-{template_id}-"))
+        try:
+            run_cmd(
+                [
+                    "python3",
+                    str(FORGE),
+                    "--repo-root",
+                    str(repo),
+                    "init",
+                    "--template",
+                    template_id,
+                    "--non-interactive",
+                    "--force",
+                ],
+                cwd=ROOT,
+            )
+            doctor = parse_json_output(
+                run_cmd(
+                    ["python3", str(FORGE), "--output-format", "json", "--repo-root", str(repo), "doctor"],
+                    cwd=ROOT,
+                ).stdout
+            )
+            checks = doctor.get("sections", {}).get("checks", [])
+            config_validation = next(
+                (item for item in checks if isinstance(item, dict) and item.get("key") == "config_validation"),
+                {},
+            )
+            provider_check = next(
+                (item for item in checks if isinstance(item, dict) and item.get("key") == "llm_provider"),
+                {},
+            )
+            assert_true(
+                config_validation.get("status") == "pass",
+                f"init baseline ({template_id}): config_validation should pass",
+            )
+            assert_true(
+                provider_check.get("status") == "warn",
+                f"init baseline ({template_id}): llm_provider should be onboarding warning",
+            )
+            assert_true(
+                doctor.get("sections", {}).get("status") != "fail",
+                f"init baseline ({template_id}): doctor should not hard-fail by default",
+            )
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+
+
 def gate_named_session_context_and_ttl(repo_root: Path) -> None:
     query_payload = parse_json_output(
         run_cmd(
@@ -3198,6 +3248,7 @@ def run_all_gates() -> None:
         gate_init_non_mutating_flows(temp_repo)
         gate_init_invalid_target_no_write(temp_repo)
         gate_init_default_alignment_with_config_foundation(temp_repo)
+        gate_init_doctor_provider_baseline_coherence()
         gate_named_session_context_and_ttl(temp_repo)
         gate_env_file_autoload(temp_repo)
         gate_prompt_profile_policy(temp_repo)

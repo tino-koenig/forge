@@ -104,7 +104,8 @@ def _render_config(template: InitTemplate, output_language: str, index_enrichmen
 # Repository-owned Forge defaults. Commit this file.
 
 [llm]
-provider = "openai_compatible"
+# Provider is intentionally unset in repo baseline.
+# Configure provider/base_url/model in .forge/config.local.toml.
 
 [llm.query_planner]
 enabled = {planner_enabled}
@@ -174,6 +175,9 @@ def _render_local_example() -> str:
     return """# Optional local overrides for machine-specific secrets and endpoints.
 # Keep this file as reference; use .forge/config.local.toml for actual local values.
 # Do not commit secrets.
+
+[llm]
+provider = "openai_compatible"
 
 [llm.openai_compatible]
 base_url = "http://localhost:8080/v1"
