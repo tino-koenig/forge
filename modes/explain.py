@@ -1018,10 +1018,23 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
 
     request = CommandRequest(capability=request.capability, profile=request.profile, payload=resolved_payload)
     raw_target = request.payload.strip()
+    orchestration_catalog = [
+        "resolve_target",
+        "collect_evidence",
+        "extract_facet",
+        "synthesize",
+        "summarize",
+        "finalize",
+    ]
+    orchestration_actions: list[dict[str, object]] = []
+
+    def mark_action(name: str, status: str, detail: str) -> None:
+        orchestration_actions.append({"action": name, "status": status, "detail": detail})
 
     target = resolve_file_or_symbol_target(repo_root, raw_target, session)
 
     if target is None:
+        mark_action("resolve_target", "failed", "target could not be resolved")
         summary = "Target could not be resolved to a readable file or known symbol."
         uncertainty = [
             "no matching file path under repo root",
@@ -1035,7 +1048,20 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             evidence=[],
             uncertainty=uncertainty,
             next_step=next_step,
-            sections={"role_classification": None, "related_files": []},
+            sections={
+                "role_classification": None,
+                "related_files": [],
+                "action_orchestration": {
+                    "catalog": orchestration_catalog,
+                    "iterations": [{"iteration": 1, "actions": orchestration_actions}],
+                    "done_reason": "unresolved_target",
+                    "usage": {
+                        "engine": "core.mode_orchestrator.iter_bounded_cycles",
+                        "max_iterations": 1,
+                        "max_wall_time_ms": 1200,
+                    },
+                },
+            },
         )
         if args.output_format == "json":
             emit_contract_json(contract)
@@ -1052,6 +1078,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         print(next_step)
         return 0
 
+    mark_action("resolve_target", "completed", f"resolved to {target.path.relative_to(repo_root)} ({target.source})")
     rel_target = target.path.relative_to(repo_root)
     evidence_limit, evidence_limit_source = _resolve_runtime_int(
         args,
@@ -1109,6 +1136,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
 
     role, rationale = classify_role(rel_target, target.content, index_entry)
     evidence = gather_evidence_for_target(target, request)[:evidence_limit]
+    mark_action("collect_evidence", "completed", f"collected {len(evidence)} evidence entries")
     related: list[Path] = []
     if request.profile in {Profile.STANDARD, Profile.DETAILED}:
         for cycle in iter_bounded_cycles(max_iterations=1, max_wall_time_ms=800):
@@ -1279,6 +1307,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
     default_values = extract_default_values(rel_target, target.content)[:defaults_limit] if explain_focus == "defaults" else []
     llm_participation = extract_llm_participation(rel_target, target.content)[:settings_limit] if explain_focus == "llm" else []
     output_surfaces = extract_output_surfaces(rel_target, target.content)[:outputs_limit] if explain_focus == "outputs" else []
+    mark_action("extract_facet", "completed", f"focus={explain_focus}")
     focus_answer = build_focus_answer(
         focus=explain_focus,
         rel_target=rel_target,
@@ -1304,6 +1333,7 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         profile=request.profile,
         evidence_facts=evidence_facts,
     )
+    mark_action("synthesize", "completed", "built role/evidence/inference synthesis payload")
     sections = {
         "explain": {
             "command": explain_command,
@@ -1364,6 +1394,16 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
             for point in inference_points
         ],
         "behavior_signals": behavior_signals,
+        "action_orchestration": {
+            "catalog": orchestration_catalog,
+            "iterations": [{"iteration": 1, "actions": orchestration_actions}],
+            "done_reason": "completed",
+            "usage": {
+                "engine": "core.mode_orchestrator.iter_bounded_cycles",
+                "max_iterations": 1,
+                "max_wall_time_ms": 1200,
+            },
+        },
     }
     if explain_focus == "settings":
         sections["direct_answer"] = focus_answer
@@ -1529,12 +1569,14 @@ def run(request: CommandRequest, args, session: ExecutionSession) -> int:
         repo_root=repo_root,
     )
     summary = llm_outcome.summary
+    mark_action("summarize", "completed", "applied deterministic+llm summary step")
     uncertainties.extend(llm_outcome.uncertainty_notes)
     sections["llm_usage"] = llm_outcome.usage
     sections["provenance"] = provenance_section(
         llm_used=bool(llm_outcome.usage.get("used")),
         evidence_count=len(evidence_payload),
     )
+    mark_action("finalize", "completed", "assembled final output contract")
 
     contract = build_contract(
         capability=request.capability.value,

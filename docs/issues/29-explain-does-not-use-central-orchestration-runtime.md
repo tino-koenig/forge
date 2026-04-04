@@ -25,3 +25,20 @@ This conflicts with the goal of a centrally available orchestrator reusable by m
 ## Linked Features
 
 - [Feature 086 - Explain Adoption of Central Mode Orchestrator](/Users/tino/PhpstormProjects/forge/docs/features/086-explain-adoption-of-central-mode-orchestrator.md)
+
+## Implemented Behavior (Current)
+
+- Explain now exposes a central-orchestrator runtime/trace section (`sections.action_orchestration`) with explicit action catalog and iteration trace.
+- The section declares and validates usage of the shared orchestrator engine family.
+- Regression coverage now enforces the orchestrator trace contract.
+
+## How To Validate Quickly
+
+- Run:
+  - `python3 scripts/run_quality_gates.py`
+- Verify:
+  - `gate_explain_central_orchestrator_adoption` passes.
+
+## Known Limits / Notes
+
+- Current explain orchestration trace runs as a bounded single-cycle flow; extension to richer multi-cycle behavior remains compatible with this contract.

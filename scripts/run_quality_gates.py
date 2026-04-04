@@ -4276,6 +4276,46 @@ def gate_explain_runtime_limit_settings(repo_root: Path) -> None:
     )
 
 
+def gate_explain_central_orchestrator_adoption(repo_root: Path) -> None:
+    payload = parse_json_output(
+        run_cmd(
+            [
+                "python3",
+                str(FORGE),
+                "--output-format",
+                "json",
+                "--llm-provider",
+                "mock",
+                "--repo-root",
+                str(repo_root),
+                "explain",
+                "src/service.py",
+            ],
+            cwd=ROOT,
+        ).stdout
+    )
+    sections = payload.get("sections", {})
+    orchestration = sections.get("action_orchestration", {}) if isinstance(sections, dict) else {}
+    assert_true(isinstance(orchestration, dict), "explain orchestrator: expected action_orchestration section")
+    assert_true(
+        orchestration.get("done_reason") == "completed",
+        "explain orchestrator: expected done_reason=completed for resolved target",
+    )
+    usage = orchestration.get("usage", {}) if isinstance(orchestration, dict) else {}
+    assert_true(
+        usage.get("engine") == "core.mode_orchestrator.iter_bounded_cycles",
+        "explain orchestrator: expected central engine annotation",
+    )
+    iterations = orchestration.get("iterations", []) if isinstance(orchestration, dict) else []
+    assert_true(isinstance(iterations, list) and iterations, "explain orchestrator: expected non-empty iterations trace")
+    first = iterations[0] if iterations else {}
+    actions = first.get("actions", []) if isinstance(first, dict) else []
+    assert_true(isinstance(actions, list) and actions, "explain orchestrator: expected action trace entries")
+    action_names = {str(item.get("action")) for item in actions if isinstance(item, dict)}
+    for expected in {"resolve_target", "collect_evidence", "extract_facet", "synthesize", "summarize", "finalize"}:
+        assert_true(expected in action_names, f"explain orchestrator: missing expected action '{expected}'")
+
+
 def gate_mode_capability_contract_query_read_only(repo_root: Path) -> None:
     before = snapshot_repo_files(repo_root)
     payload = parse_json_output(
@@ -4864,6 +4904,7 @@ def run_all_gates() -> None:
         gate_explain_facet_semantics_validation(temp_repo)
         gate_explain_analysis_foundation_extraction(temp_repo)
         gate_explain_runtime_limit_settings(temp_repo)
+        gate_explain_central_orchestrator_adoption(temp_repo)
         gate_mode_capability_contract_query_read_only(temp_repo)
         gate_query_action_orchestration(temp_repo)
         gate_adaptive_query_explain_feedback(temp_repo)
