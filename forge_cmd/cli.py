@@ -907,12 +907,21 @@ def main(argv: list[str] | None = None) -> int:
         )
         sections = contract_payload.get("sections", {}) if isinstance(contract_payload, dict) else {}
         if isinstance(sections, dict):
+            summary_refinement_usage: dict[str, object] | None = None
+            llm_usage_section = sections.get("llm_usage")
+            if isinstance(llm_usage_section, dict):
+                stage_usage = llm_usage_section.get("stage_usage")
+                if isinstance(stage_usage, dict) and isinstance(stage_usage.get("summary_refinement"), dict):
+                    summary_refinement_usage = dict(llm_usage_section)
+                    summary_refinement_usage.update(stage_usage.get("summary_refinement"))
+                else:
+                    summary_refinement_usage = llm_usage_section
             protocol_events.extend(
                 llm_step_events_from_usage(
                     run_id=0,
                     capability=request.capability.value,
                     step_name="summary_refinement",
-                    usage=sections.get("llm_usage") if isinstance(sections.get("llm_usage"), dict) else None,
+                    usage=summary_refinement_usage,
                 )
             )
             planner = sections.get("query_planner")

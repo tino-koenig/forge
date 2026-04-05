@@ -3112,27 +3112,39 @@ def gate_describe_symbol_anchor_evidence(repo_root: Path) -> None:
 
 
 def gate_describe_important_file_scope_policy(repo_root: Path) -> None:
-    (repo_root / "README.md").write_text("# Root Readme\n\nPrimary project docs.\n", encoding="utf-8")
-    (repo_root / "pyproject.toml").write_text("[project]\nname='demo'\nversion='0.1.0'\n", encoding="utf-8")
-    noisy_dir = repo_root / "tests" / "fixtures" / "noise"
-    noisy_dir.mkdir(parents=True, exist_ok=True)
-    (noisy_dir / "README.md").write_text("# Noisy Fixture Readme\n", encoding="utf-8")
-    (noisy_dir / "main.py").write_text("def fixture_main():\n    return 1\n", encoding="utf-8")
+    with tempfile.TemporaryDirectory(prefix="forge-describe-scope-") as td:
+        gate_repo = Path(td) / "repo-scope-policy"
+        shutil.copytree(FIXTURE_BASIC_SRC, gate_repo)
+        (gate_repo / ".forge").mkdir(parents=True, exist_ok=True)
 
-    payload = parse_json_output(
-        run_cmd(
-            [
-                "python3",
-                str(FORGE),
-                "--output-format",
-                "json",
-                "--repo-root",
-                str(repo_root),
-                "describe",
-            ],
-            cwd=ROOT,
-        ).stdout
-    )
+        (gate_repo / "README.md").write_text("# Root Readme\n\nPrimary project docs.\n", encoding="utf-8")
+        (gate_repo / "pyproject.toml").write_text("[project]\nname='demo'\nversion='0.1.0'\n", encoding="utf-8")
+        noisy_dir = gate_repo / "tests" / "fixtures" / "noise"
+        noisy_dir.mkdir(parents=True, exist_ok=True)
+        (noisy_dir / "README.md").write_text("# Noisy Fixture Readme\n", encoding="utf-8")
+        (noisy_dir / "main.py").write_text("def fixture_main():\n    return 1\n", encoding="utf-8")
+
+        env = os.environ.copy()
+        env.pop("FORGE_RUNTIME_SESSION_JSON", None)
+        env.pop("FORGE_USER_RUNTIME_TOML", None)
+        runtime_override = Path(td) / "runtime.toml"
+        runtime_override.write_text('"describe.important_files.max_items" = 100\n', encoding="utf-8")
+        env["FORGE_USER_RUNTIME_TOML"] = str(runtime_override)
+        payload = parse_json_output(
+            run_cmd(
+                [
+                    "python3",
+                    str(FORGE),
+                    "--output-format",
+                    "json",
+                    "--repo-root",
+                    str(gate_repo),
+                    "describe",
+                ],
+                cwd=ROOT,
+                env=env,
+            ).stdout
+        )
     sections = payload.get("sections", {})
     important_files = sections.get("important_files", [])
     assert_true(isinstance(important_files, list) and important_files, "describe scope policy: expected non-empty important_files")

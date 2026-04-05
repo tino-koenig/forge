@@ -35,7 +35,7 @@ def _parse_logs_command(parts: list[str]) -> tuple[str, int | None, str | None]:
     first = parts[0].lower()
     if first == "tail":
         if len(parts) >= 2:
-            count = _safe_int(parts[1])
+            count = safe_int(parts[1])
             if count is None or count <= 0:
                 raise ValueError("Usage: forge logs tail [count>0]")
             return "tail", count, None
@@ -43,7 +43,7 @@ def _parse_logs_command(parts: list[str]) -> tuple[str, int | None, str | None]:
     if first == "run":
         if len(parts) < 2:
             raise ValueError("Usage: forge logs run <run_id>")
-        run_id = _safe_int(parts[1])
+        run_id = safe_int(parts[1])
         if run_id is None or run_id <= 0:
             raise ValueError("Usage: forge logs run <run_id>")
         return "run", run_id, None

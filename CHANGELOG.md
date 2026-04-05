@@ -52,6 +52,9 @@ All notable changes to Forge should be documented in this file.
 - issue 64: fixed `gate_explain_facet_quality_matrix` fixture target from non-existent `core/llm_observability.py` to fixture-valid `src/service.py` to keep alias/flag focus parity checks deterministic
 - issue 65: updated `gate_adaptive_query_explain_feedback` to use fixture-aligned query payload (`compute_price`) so explain-feedback assertions remain deterministic in `basic_repo`
 - issue 66: `gate_fallback_with_and_without_index` now recreates shared fixture `.forge` marker before fallback checks so index-missing validation works without violating repo-marker preconditions
+- issue 67: `gate_describe_important_file_scope_policy` now runs on an isolated temporary fixture repo (plus gate-local runtime override) to keep fixture-subtree rationale assertions deterministic in full-suite runs
+- issue 68: fixed logs command parsing NameError by replacing undefined `_safe_int` calls with shared `safe_int` helper in `modes/logs.py`
+- issue 69: protocol event assembly now derives `summary_refinement` llm events from stage-specific usage (`llm_usage.stage_usage.summary_refinement`) instead of aggregated query llm usage
 - feature 069 / issue 10: `forge index` now persists graph-build failure warnings to `.forge/index.json` (`graph.warning`) so artifact metadata matches console graph-status output
 - feature 071 / issue 13: framework graph refs now enforce schema/version validation on load, exclude invalid refs from active usage, and expose per-ref validation warnings in query/explain `graph_usage`
 - feature 070 / issue 12: repo graph load now validates schema/version compatibility, rejects invalid payloads deterministically, and exposes graph validation state/warnings in query/explain graph_usage
