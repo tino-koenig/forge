@@ -5,6 +5,7 @@ All notable changes to Forge should be documented in this file.
 ## Unreleased
 
 ### Added
+- feature 120: added parallel Foundation 04 runtime-settings core (`core/runtime_settings_foundation.py`, `core/runtime_settings_foundation_registry.py`) with typed schema validation, deterministic precedence (`cli>local>repo>default`), invalid-input fallback diagnostics, and dedicated unit tests
 - feature 119: added parallel Foundation 12 workspace core (`core/workspace_foundation.py`, `core/workspace_locators.py`, `core/workspace_scope_rules.py`, `core/workspace_roles.py`) with deterministic workspace snapshot IDs, canonical locator normalization, explicit read/write scope decisions (write deny-by-default), prioritized include/ignore rules with rule-provenance diagnostics, and role classification (`source|config|test|docs|generated|artifact|external`) plus dedicated unit tests
 - issue 1: status index for features/issues with defined and implemented dates via `scripts/status_index.py` and `docs/status/*`
 - issue 1: issue folder bootstrap in `docs/issues/`
