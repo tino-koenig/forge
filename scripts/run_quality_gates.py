@@ -1401,6 +1401,12 @@ def gate_named_session_context_and_ttl(repo_root: Path) -> None:
 def gate_env_file_autoload(repo_root: Path) -> None:
     forge_dir = repo_root / ".forge"
     forge_dir.mkdir(parents=True, exist_ok=True)
+    runtime_path = forge_dir / "runtime.toml"
+    if runtime_path.exists():
+        runtime_path.unlink()
+    sessions_dir = forge_dir / "sessions"
+    if sessions_dir.exists():
+        shutil.rmtree(sessions_dir)
     (forge_dir / "config.toml").write_text(
         (
             "[llm]\n"
@@ -1417,6 +1423,8 @@ def gate_env_file_autoload(repo_root: Path) -> None:
 
     env = os.environ.copy()
     env.pop("FORGE_LLM_API_KEY", None)
+    env.pop("FORGE_RUNTIME_SESSION_JSON", None)
+    env.pop("FORGE_USER_RUNTIME_TOML", None)
     payload = parse_json_output(
         run_cmd(
             [
