@@ -104,6 +104,7 @@ class ModeExecutionFoundationTests(unittest.TestCase):
         self.assertEqual([r.stage_name for r in outcome.stage_results], ["init", "analyze", "finalize"])
         self.assertEqual([t.stage_name for t in outcome.trace], ["init", "analyze", "finalize"])
         self.assertTrue(all(t.duration_ms == 5 for t in outcome.trace))
+        self.assertEqual(outcome.terminal_status, "ok")
 
     def test_finalize_best_effort_runs_after_error_and_blocks_rest(self) -> None:
         called: list[str] = []
@@ -146,6 +147,7 @@ class ModeExecutionFoundationTests(unittest.TestCase):
         self.assertEqual(outcome.stage_results[2].status, "blocked")
         self.assertEqual(outcome.stage_results[2].diagnostics[0].code, "stage_skipped_upstream_error")
         self.assertEqual(outcome.stage_results[3].stage_name, "finalize")
+        self.assertEqual(outcome.terminal_status, "error")
 
     def test_skip_diagnostic_distinguishes_upstream_blocked(self) -> None:
         def init_handler(_ctx, _state):
@@ -281,7 +283,7 @@ class ModeExecutionFoundationTests(unittest.TestCase):
         self.assertEqual(outcome.state.section_contributions["summary"], ("a", "c"))
         self.assertEqual(outcome.state.section_contributions["evidence"], ("b",))
 
-    def test_stage_status_does_not_force_terminal_status(self) -> None:
+    def test_terminal_status_falls_back_to_blocked_without_explicit_state_delta(self) -> None:
         def init_handler(_ctx, _state):
             return StageResult("init", "s-init", "ok", "none")
 
@@ -301,9 +303,37 @@ class ModeExecutionFoundationTests(unittest.TestCase):
         )
 
         outcome = run_mode(plan, _context(_Clock()))
-        self.assertIsNone(outcome.terminal_status)
+        self.assertEqual(outcome.terminal_status, "blocked")
         self.assertIsNone(outcome.done_reason)
         self.assertEqual(outcome.stage_results[-1].stage_name, "finalize")
+
+    def test_explicit_terminal_status_still_wins_over_fallback(self) -> None:
+        def init_handler(_ctx, _state):
+            return StageResult("init", "s-init", "ok", "none")
+
+        def collect_handler(_ctx, _state):
+            return StageResult(
+                "collect",
+                "s-collect",
+                "error",
+                "read",
+                state_delta={"terminal_status": "blocked"},
+            )
+
+        def finalize_handler(_ctx, _state):
+            return StageResult("finalize", "s-finalize", "ok", "none")
+
+        plan = ModeExecutionPlan(
+            mode_name="demo",
+            stages=(
+                StageDefinition("init", "s-init", "none", init_handler),
+                StageDefinition("collect", "s-collect", "read", collect_handler),
+                StageDefinition("finalize", "s-finalize", "none", finalize_handler),
+            ),
+        )
+
+        outcome = run_mode(plan, _context(_Clock()))
+        self.assertEqual(outcome.terminal_status, "blocked")
 
     def test_finalize_cannot_invent_domain_state(self) -> None:
         def init_handler(_ctx, _state):

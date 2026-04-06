@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from time import time
-from typing import Callable, Literal, Mapping
+from typing import Callable, Literal, Mapping, Sequence
 
 StageStatus = Literal["ok", "noop", "blocked", "error"]
 TerminalStatus = Literal["ok", "blocked", "error"]
@@ -119,6 +119,22 @@ class ExecutionOutcome:
     trace: tuple[TraceEntry, ...]
     terminal_status: TerminalStatus | None
     done_reason: str | None
+
+
+def _derive_terminal_status(state: ExecutionState, stage_results: Sequence[StageResult]) -> TerminalStatus:
+    explicit = state.terminal_status
+    if explicit in ("ok", "blocked", "error"):
+        return explicit
+
+    has_error = any(result.status == "error" for result in stage_results)
+    if has_error:
+        return "error"
+
+    has_blocked = any(result.status == "blocked" for result in stage_results)
+    if has_blocked:
+        return "blocked"
+
+    return "ok"
 
 
 def _merge_mapping(current: Mapping[str, object], delta: Mapping[str, object]) -> dict[str, object]:
@@ -306,13 +322,14 @@ def run_mode(plan: ModeExecutionPlan, context: ExecutionContext) -> ExecutionOut
     state = apply_stage_result(state, finalize_result)
     stage_results.append(finalize_result)
     trace.append(_trace_entry(context, finalize_result, max(0, finished - started)))
+    terminal_status = _derive_terminal_status(state, stage_results)
 
     return ExecutionOutcome(
         mode_name=plan.mode_name,
         state=state,
         stage_results=tuple(stage_results),
         trace=tuple(trace),
-        terminal_status=state.terminal_status,
+        terminal_status=terminal_status,
         done_reason=state.done_reason,
     )
 
