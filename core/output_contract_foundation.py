@@ -393,11 +393,11 @@ def _validate_action_orchestration_semantics(
                 section="action_orchestration",
             )
         )
-    if "done_reason" in payload and not isinstance(payload["done_reason"], str):
+    if "done_reason" in payload and payload["done_reason"] is not None and not isinstance(payload["done_reason"], str):
         diagnostics.append(
             ContractDiagnostic(
                 code="invalid_action_orchestration_done_reason",
-                message="action_orchestration.payload.done_reason must be a string.",
+                message="action_orchestration.payload.done_reason must be a string or null.",
                 severity="error",
                 section="action_orchestration",
             )

@@ -233,6 +233,31 @@ class OutputContractFoundationTests(unittest.TestCase):
         diagnostic_codes = {item.code for item in diagnostics}
         self.assertNotIn("action_orchestration_minimum_fields_missing", diagnostic_codes)
 
+    def test_action_orchestration_non_terminal_done_reason_can_be_null(self) -> None:
+        contract = build_contract_core(
+            capability="query",
+            profile="standard",
+            summary="ok",
+            evidence=(),
+            uncertainty=(),
+            next_step="next",
+            section_inputs={
+                "action_orchestration": SectionInput(
+                    payload={
+                        "status": "running",
+                        "decision": "continue",
+                        "control_signal": "none",
+                        "done_reason": None,
+                    }
+                )
+            },
+        )
+        diagnostics = validate_contract_schema(contract)
+        diagnostic_codes = {item.code for item in diagnostics}
+        self.assertNotIn("invalid_action_orchestration_done_reason", diagnostic_codes)
+        self.assertNotIn("invalid_action_orchestration_done_reason_value", diagnostic_codes)
+        self.assertNotIn("action_orchestration_minimum_fields_missing", diagnostic_codes)
+
     def test_action_orchestration_minimum_fields_missing_reports_exact_field(self) -> None:
         contract = build_contract_core(
             capability="query",
