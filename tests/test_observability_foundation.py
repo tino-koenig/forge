@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from core.observability_foundation import (
     EVENT_ACTION_BLOCKED,
     EVENT_ACTION_EXECUTED,
+    EVENT_ACTION_PLANNED,
     EVENT_BUDGET_EXHAUSTED,
     EVENT_BUDGET_SNAPSHOT,
     EVENT_DECISION_MADE,
@@ -175,6 +176,23 @@ class ObservabilityFoundationTests(unittest.TestCase):
         )
         obs_log_event(event)
         self.assertTrue(event.event_type.startswith("action_"))
+
+    def test_action_planned_does_not_require_action_input_hash(self) -> None:
+        run_id = obs_start_run(self.context)
+        event = obs_make_event(
+            context=self.context,
+            run_id=run_id,
+            event_type=EVENT_ACTION_PLANNED,
+            payload={"action": "scan"},
+            redaction_status="not_needed",
+            action_id="plan-1",
+            iteration_id="iter-1",
+            policy_version="policy-1",
+            settings_snapshot_id="settings-1",
+        )
+        obs_log_event(event)
+        self.assertEqual(event.event_type, EVENT_ACTION_PLANNED)
+        self.assertIsNone(event.action_input_hash)
 
     def test_run_summary_is_derived_from_events(self) -> None:
         run_id = obs_start_run(self.context)

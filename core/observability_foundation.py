@@ -51,6 +51,11 @@ EVENT_TYPES: tuple[str, ...] = (
 )
 
 ORCHESTRATION_EVENT_PREFIXES: tuple[str, ...] = ("action_", "decision_", "budget_", "policy_")
+ACTION_EVENTS_REQUIRING_INPUT_HASH: tuple[str, ...] = (
+    EVENT_ACTION_EXECUTED,
+    EVENT_ACTION_NOOP,
+    EVENT_ACTION_BLOCKED,
+)
 SENSITIVE_KEY_FRAGMENTS: tuple[str, ...] = ("secret", "token", "password", "api_key", "authorization")
 
 
@@ -170,8 +175,8 @@ class ObsEvent:
             if self.settings_snapshot_id is None:
                 raise ValueError("settings_snapshot_id is required for orchestration events.")
 
-        if self.event_type.startswith("action_") and self.action_input_hash is None:
-            raise ValueError("action_input_hash is required for action events.")
+        if self.event_type in ACTION_EVENTS_REQUIRING_INPUT_HASH and self.action_input_hash is None:
+            raise ValueError("action_input_hash is required for executed/noop/blocked action events.")
 
     def _is_orchestration_event(self) -> bool:
         return any(self.event_type.startswith(prefix) for prefix in ORCHESTRATION_EVENT_PREFIXES)
