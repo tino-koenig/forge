@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 import unittest
 
 from core.target_resolution_foundation import (
@@ -217,6 +218,32 @@ class TargetResolutionFoundationTests(unittest.TestCase):
         self.assertEqual(result.resolution_source, "explicit_path")
         self.assertEqual(result.resolution_status, "unresolved")
         self.assertTrue(any(d.code == "unresolved_path" for d in result.diagnostics))
+
+    def test_explicit_home_path_expands_before_known_path_matching(self) -> None:
+        context = self._context()
+        expanded = Path("~/repo/a.py").expanduser().as_posix()
+        home_context = TargetResolutionContext(
+            candidate_pool=context.candidate_pool,
+            known_paths=(expanded,),
+            known_directories=context.known_directories,
+            repo_root=context.repo_root,
+            from_run_references=context.from_run_references,
+            allowed_transitions=context.allowed_transitions,
+            capability_mode_map=context.capability_mode_map,
+            policy=context.policy,
+            run_id=context.run_id,
+            trace_id=context.trace_id,
+            workspace_snapshot_id=context.workspace_snapshot_id,
+        )
+        result = resolve_target(
+            TargetRequest(raw_target="~/repo/a.py", capability="explain", profile="standard"),
+            home_context,
+        )
+        self.assertEqual(result.resolution_status, "resolved")
+        self.assertEqual(result.resolution_source, "explicit_path")
+        self.assertEqual(result.resolved_kind, "path")
+        self.assertEqual(result.resolved_path, expanded)
+        self.assertEqual(result.resolved_target, expanded)
 
     def test_constraints_and_hints_are_used_for_resolution(self) -> None:
         context = self._context()

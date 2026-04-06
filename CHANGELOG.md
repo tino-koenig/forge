@@ -48,6 +48,7 @@ All notable changes to Forge should be documented in this file.
 - feature 057: added reusable LLM foundation (`core/llm_foundation.py`) with shared policy/settings/prompt/provider/run-step APIs and integrated delegation from `core/llm_integration.py`
 
 ### Changed
+- issue 88: target-resolution explicit-path matching now expands `~` home paths before checking `known_paths`/`known_directories`, so equivalent home/absolute path forms resolve consistently
 - issue 87: output-contract validator now accepts `action_orchestration.payload.done_reason = null` for non-terminal orchestration payloads, aligning Foundation 10 validation with Foundation 02 in-progress decision semantics while keeping minimum-field enforcement intact
 - issue 86: typing quality-gate scope metadata is now centralized and emitted explicitly (includes/excludes + scoped PASS semantics) for both foundation and repo-wide mypy gates
 - issue 85: quality gates now surface repo-wide mypy health separately via advisory baseline gate (`core,modes,forge,forge_cmd`) and fail only on baseline regression (`>206` errors)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Literal, Mapping, Sequence
 
@@ -253,13 +254,14 @@ def _explicit_path_result(
             trace_id=context.trace_id,
             workspace_snapshot_id=context.workspace_snapshot_id,
         )
-    if raw in set(context.known_paths):
+    normalized_raw = _normalize_explicit_path_for_matching(raw)
+    if normalized_raw in set(context.known_paths):
         return TargetResolutionResult(
             resolution_contract_version=RESOLUTION_CONTRACT_VERSION,
             resolution_status="resolved",
             resolved_kind="path",
-            resolved_target=raw,
-            resolved_path=raw,
+            resolved_target=normalized_raw,
+            resolved_path=normalized_raw,
             resolved_symbol=None,
             resolution_source="explicit_path",
             resolution_strategy="exact",
@@ -272,13 +274,13 @@ def _explicit_path_result(
             trace_id=context.trace_id,
             workspace_snapshot_id=context.workspace_snapshot_id,
         )
-    if raw in set(context.known_directories):
+    if normalized_raw in set(context.known_directories):
         return TargetResolutionResult(
             resolution_contract_version=RESOLUTION_CONTRACT_VERSION,
             resolution_status="resolved",
             resolved_kind="directory",
-            resolved_target=raw,
-            resolved_path=raw,
+            resolved_target=normalized_raw,
+            resolved_path=normalized_raw,
             resolved_symbol=None,
             resolution_source="explicit_path",
             resolution_strategy="exact",
@@ -315,6 +317,15 @@ def _explicit_path_result(
         trace_id=context.trace_id,
         workspace_snapshot_id=context.workspace_snapshot_id,
     )
+
+
+def _normalize_explicit_path_for_matching(raw_target: str) -> str:
+    if not raw_target.startswith("~"):
+        return raw_target
+    try:
+        return Path(raw_target).expanduser().as_posix()
+    except RuntimeError:
+        return raw_target
 
 
 def resolve_from_run_reference(request: TargetRequest, context: TargetResolutionContext) -> TargetResolutionResult:
