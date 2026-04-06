@@ -62,6 +62,7 @@ class TransitionDecision:
     allowed: bool
     source_mode: str | None
     target_mode: str | None
+    target_capability: str | None
     reason: str
     diagnostics: tuple[TargetResolutionDiagnostic, ...] = tuple()
 
@@ -110,6 +111,7 @@ class TargetResolutionContext:
     repo_root: str | None = None
     from_run_references: Mapping[str, FromRunReference] = field(default_factory=dict)
     allowed_transitions: tuple[tuple[str, str], ...] = tuple()
+    capability_mode_map: Mapping[str, str] = field(default_factory=dict)
     policy: ResolutionPolicy = field(default_factory=ResolutionPolicy)
     run_id: str | None = None
     trace_id: str | None = None
@@ -154,13 +156,20 @@ def order_target_candidates_for_resolution(
     )
 
 
-def validate_transition(source_mode: str, target_mode: str, context: TargetResolutionContext) -> TransitionDecision:
+def validate_transition(
+    source_mode: str,
+    target_mode: str,
+    context: TargetResolutionContext,
+    *,
+    target_capability: str | None = None,
+) -> TransitionDecision:
     if (source_mode, target_mode) in set(context.allowed_transitions):
         return TransitionDecision(
             status="allowed",
             allowed=True,
             source_mode=source_mode,
             target_mode=target_mode,
+            target_capability=target_capability,
             reason="transition_allowed",
         )
     return TransitionDecision(
@@ -168,16 +177,48 @@ def validate_transition(source_mode: str, target_mode: str, context: TargetResol
         allowed=False,
         source_mode=source_mode,
         target_mode=target_mode,
+        target_capability=target_capability,
         reason="transition_blocked",
         diagnostics=(
             TargetResolutionDiagnostic(
                 code="transition_blocked",
                 message=f"Transition {source_mode}->{target_mode} is not allowed.",
                 severity="error",
-                context={"source_mode": source_mode, "target_mode": target_mode},
+                context={
+                    "source_mode": source_mode,
+                    "target_mode": target_mode,
+                    "target_capability": target_capability,
+                },
             ),
         ),
     )
+
+
+def _resolve_target_mode(request: TargetRequest, context: TargetResolutionContext) -> str | None:
+    constraint_mode = request.constraints.get("target_mode")
+    if isinstance(constraint_mode, str) and constraint_mode.strip():
+        return constraint_mode.strip()
+
+    hint_mode = request.target_hints.get("target_mode")
+    if isinstance(hint_mode, str) and hint_mode.strip():
+        return hint_mode.strip()
+
+    mapped_mode = context.capability_mode_map.get(request.capability)
+    if isinstance(mapped_mode, str) and mapped_mode.strip():
+        return mapped_mode.strip()
+
+    default_mode_map = {
+        "query": "query",
+        "explain": "explain",
+        "review": "review",
+        "describe": "describe",
+        "test": "test",
+        "ask": "ask",
+    }
+    fallback_mode = default_mode_map.get(request.capability)
+    if isinstance(fallback_mode, str) and fallback_mode.strip():
+        return fallback_mode.strip()
+    return None
 
 
 def _explicit_path_result(
@@ -305,7 +346,48 @@ def resolve_from_run_reference(request: TargetRequest, context: TargetResolution
             workspace_snapshot_id=context.workspace_snapshot_id,
         )
 
-    transition = validate_transition(reference.source_mode, request.capability, context)
+    target_mode = _resolve_target_mode(request, context)
+    if target_mode is None:
+        return TargetResolutionResult(
+            resolution_contract_version=RESOLUTION_CONTRACT_VERSION,
+            resolution_status="blocked",
+            resolved_kind=None,
+            resolved_target=None,
+            resolved_path=None,
+            resolved_symbol=None,
+            resolution_source="from_run",
+            resolution_strategy="exact",
+            candidates=tuple(),
+            evidence_anchors=tuple(reference.evidence_anchors),
+            diagnostics=(
+                TargetResolutionDiagnostic(
+                    code="target_mode_unresolved",
+                    message="Target mode is required for transition validation and could not be resolved.",
+                    severity="error",
+                    context={"target_capability": request.capability},
+                ),
+            ),
+            ambiguity_top_k=tuple(),
+            transition_meta={
+                "from_run": reference.run_id,
+                "source_mode": reference.source_mode,
+                "target_mode": None,
+                "target_capability": request.capability,
+                "source_capability": reference.source_capability,
+                "strategy": reference.strategy,
+                **dict(reference.transition_meta),
+            },
+            run_id=context.run_id,
+            trace_id=context.trace_id,
+            workspace_snapshot_id=context.workspace_snapshot_id,
+        )
+
+    transition = validate_transition(
+        reference.source_mode,
+        target_mode,
+        context,
+        target_capability=request.capability,
+    )
     if not transition.allowed:
         return TargetResolutionResult(
             resolution_contract_version=RESOLUTION_CONTRACT_VERSION,
@@ -323,7 +405,8 @@ def resolve_from_run_reference(request: TargetRequest, context: TargetResolution
             transition_meta={
                 "from_run": reference.run_id,
                 "source_mode": reference.source_mode,
-                "target_mode": request.capability,
+                "target_mode": target_mode,
+                "target_capability": request.capability,
                 "source_capability": reference.source_capability,
                 "strategy": reference.strategy,
                 **dict(reference.transition_meta),
@@ -349,7 +432,8 @@ def resolve_from_run_reference(request: TargetRequest, context: TargetResolution
         transition_meta={
             "from_run": reference.run_id,
             "source_mode": reference.source_mode,
-            "target_mode": request.capability,
+            "target_mode": target_mode,
+            "target_capability": request.capability,
             "source_capability": reference.source_capability,
             "strategy": reference.strategy,
             **dict(reference.transition_meta),

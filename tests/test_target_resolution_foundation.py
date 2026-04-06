@@ -116,6 +116,8 @@ class TargetResolutionFoundationTests(unittest.TestCase):
         self.assertEqual(result.resolution_source, "from_run")
         self.assertEqual(result.resolved_kind, "path")
         self.assertEqual(result.transition_meta.get("from_run"), "run-123")
+        self.assertEqual(result.transition_meta.get("target_mode"), "review")
+        self.assertEqual(result.transition_meta.get("target_capability"), "review")
 
     def test_transition_validation_blocked(self) -> None:
         context = self._context()
@@ -128,6 +130,39 @@ class TargetResolutionFoundationTests(unittest.TestCase):
         result = resolve_from_run_reference(request, self._context())
         self.assertEqual(result.resolution_status, "blocked")
         self.assertTrue(any(d.code == "transition_blocked" for d in result.diagnostics))
+
+    def test_from_run_prefers_explicit_target_mode_over_capability(self) -> None:
+        request = TargetRequest(
+            raw_target="ignored",
+            capability="query",
+            profile="standard",
+            from_run="run-123",
+            constraints={"target_mode": "review"},
+        )
+        result = resolve_from_run_reference(request, self._context())
+        self.assertEqual(result.resolution_status, "resolved")
+        self.assertEqual(result.transition_meta.get("target_mode"), "review")
+        self.assertEqual(result.transition_meta.get("target_capability"), "query")
+
+    def test_from_run_blocks_when_target_mode_cannot_be_resolved(self) -> None:
+        context = self._context()
+        mapped = TargetResolutionContext(
+            candidate_pool=context.candidate_pool,
+            known_paths=context.known_paths,
+            known_directories=context.known_directories,
+            repo_root=context.repo_root,
+            from_run_references=context.from_run_references,
+            allowed_transitions=context.allowed_transitions,
+            capability_mode_map={"review": "review"},
+            policy=context.policy,
+            run_id=context.run_id,
+            trace_id=context.trace_id,
+            workspace_snapshot_id=context.workspace_snapshot_id,
+        )
+        request = TargetRequest(raw_target="ignored", capability="custom_capability", profile="standard", from_run="run-123")
+        result = resolve_from_run_reference(request, mapped)
+        self.assertEqual(result.resolution_status, "blocked")
+        self.assertTrue(any(d.code == "target_mode_unresolved" for d in result.diagnostics))
 
     def test_deterministic_candidate_ordering(self) -> None:
         candidates = (
