@@ -48,3 +48,8 @@ tests_dir = [
   "tests/test_evidence_ranking_foundation.py",
   "tests/test_target_resolution_foundation.py",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests/fixtures/basic_repo"]
+norecursedirs = ["mutants", ".git", ".venv", "site"]
