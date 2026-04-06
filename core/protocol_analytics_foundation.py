@@ -79,7 +79,10 @@ def apply_filters(events: list[dict[str, object]], args) -> list[dict[str, objec
 
     run_id_filter = getattr(args, "logs_run_id", None)
     if run_id_filter is not None:
-        filtered = [item for item in filtered if safe_int(item.get("run_id")) == int(run_id_filter)]
+        run_id = safe_int(run_id_filter)
+        if run_id is None:
+            raise ValueError("invalid --run-id filter: expected integer")
+        filtered = [item for item in filtered if safe_int(item.get("run_id")) == run_id]
     capability_filter = getattr(args, "logs_capability", None)
     if isinstance(capability_filter, str) and capability_filter.strip():
         cap = capability_filter.strip().lower()

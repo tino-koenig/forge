@@ -48,6 +48,7 @@ All notable changes to Forge should be documented in this file.
 - feature 057: added reusable LLM foundation (`core/llm_foundation.py`) with shared policy/settings/prompt/provider/run-step APIs and integrated delegation from `core/llm_integration.py`
 
 ### Changed
+- issue 90: protocol-analytics filter parsing now validates `--run-id` via safe integer conversion and raises a controlled validation error for invalid input instead of crashing during filtering
 - issue 89: observability now requires `action_input_hash` only for execution-phase action events (`action_executed`, `action_noop`, `action_blocked`); early `action_planned` events no longer fail schema validation without an input hash
 - issue 88: target-resolution explicit-path matching now expands `~` home paths before checking `known_paths`/`known_directories`, so equivalent home/absolute path forms resolve consistently
 - issue 87: output-contract validator now accepts `action_orchestration.payload.done_reason = null` for non-terminal orchestration payloads, aligning Foundation 10 validation with Foundation 02 in-progress decision semantics while keeping minimum-field enforcement intact
