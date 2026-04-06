@@ -15,22 +15,26 @@ hide:
   }
 </style>
 
+<div class="forge-lang-switch forge-lang-switch--global" aria-label="Language selection">
+  <a class="is-active" href="./">EN</a>
+  <span>•</span>
+  <a href="../de/">DE</a>
+  <span>•</span>
+  <button type="button" class="forge-theme-toggle" data-forge-theme-toggle aria-label="Toggle theme">Dark</button>
+</div>
 <section class="forge-hero">
   <div class="forge-hero__copy">
-    <div class="forge-lang-switch" aria-label="Language selection">
-      <a class="is-active" href="./">EN</a>
-      <span>•</span>
-      <a href="../de/">DE</a>
-      <span>•</span>
-      <button type="button" class="forge-theme-toggle" data-forge-theme-toggle aria-label="Toggle theme">Dark</button>
-    </div>
     <h1>Forge - Your AI Repo Workbench</h1>
     <p class="forge-lead">
       With control, not magic. Forge helps you query, review, test, and improve repositories with explicit steps, visible evidence, and auditable outputs.
     </p>
+    <p class="forge-subline">No black box. No hidden jumps. Just visible repo work: query, explain, review, propose.</p>
     <div class="forge-hero__actions">
       <a class="md-button md-button--primary" href="getting-started.md">Get Started</a>
       <a class="md-button" href="core-commands.md">See Commands</a>
+    </div>
+    <div class="forge-hero__example">
+      <strong>Example:</strong> You ask <code>"Where is session TTL configured?"</code>. Forge finds the matching files, shows the relevant lines, explains why they matter, and keeps every step traceable for review and safe changes.
     </div>
   </div>
   <div class="forge-hero__visual">
@@ -95,7 +99,7 @@ forge review src/checkout.py --focus reliability
 forge describe core/workspace_foundation.py
 ```
 
-## Choose your entry point — based on time and goal
+## Choose your entry point based on time and goal
 
 <div class="forge-start-grid">
   <article class="forge-start-card forge-start-card--quick">
@@ -124,12 +128,15 @@ forge query "Where is the runtime settings resolver implemented?"</code></pre>
       <li><a href="https://github.com/example/forge-ai-repo-workbench">GitHub Repository</a></li>
     </ul>
   </article>
+  <article class="forge-start-card forge-start-card--trust forge-trust-card">
+    <h3>Trust, Safety, Openness</h3>
+    <p>Forge is built to stay inspectable, bounded, and usable in real environments with explicit rules, visible limits, and auditable behavior.</p>
+    <ul>
+      <li><strong>Developer Documentation:</strong> Foundations, contracts, and architecture notes live in <code>docs/developer/</code>.</li>
+      <li><strong>Trust &amp; Safety:</strong> <a href="trust-and-safety.md">Rules, safeguards, and boundaries</a> are explicit and enforceable.</li>
+      <li><strong>Logging &amp; Limits:</strong> Runtime limits and diagnostics remain visible in <a href="runtime-settings-and-sessions.md">Runtime Settings &amp; Sessions</a>.</li>
+      <li><strong>LLM Providers &amp; Local LLM:</strong> OpenAI-compatible endpoints are documented in <a href="llm-setup.md">LLM Setup</a>.</li>
+      <li><strong>Open Source (MIT):</strong> Forge is fully open and auditable under the MIT license.</li>
+    </ul>
+  </article>
 </div>
-
-## Trust, Safety, Openness
-
-- **Developer Documentation:** Foundations, contracts, and architecture notes live in `docs/developer/` in the repository.
-- **Trust & Safety:** [Rules, safeguards, and boundaries](trust-and-safety.md) are explicitly documented.
-- **Logging & Limits:** Runtime limits (read/write scope) and diagnostics transparency are documented in [Runtime Settings & Sessions](runtime-settings-and-sessions.md).
-- **LLM Providers & Local LLM:** Forge supports OpenAI-compatible endpoints, including `OpenAI`, `LiteLLM`, and `vLLM` setups, documented in [LLM Setup](llm-setup.md).
-- **Open Source (MIT):** Forge is available under the MIT license (`LICENSE` in the repository).
