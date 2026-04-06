@@ -68,6 +68,8 @@ IMPLEMENTED_FOUNDATION_MYPY_FILES: tuple[str, ...] = (
     "core/evidence_ranking_foundation.py",
     "core/target_resolution_foundation.py",
 )
+REPO_WIDE_MYPY_PATHS: tuple[str, ...] = ("core", "modes", "forge", "forge_cmd")
+REPO_WIDE_MYPY_BASELINE_ERRORS = 206
 
 
 class GateError(RuntimeError):
@@ -5726,6 +5728,18 @@ def gate_fallback_with_and_without_index(repo_root: Path) -> None:
 
 
 def gate_foundation_mypy_contracts() -> None:
+    selected_cmd = _select_mypy_command()
+
+    run_cmd(
+        [
+            *selected_cmd,
+            *IMPLEMENTED_FOUNDATION_MYPY_FILES,
+        ],
+        cwd=ROOT,
+    )
+
+
+def _select_mypy_command() -> list[str]:
     candidate_commands: list[list[str]] = []
     venv_python = ROOT / ".venv" / "bin" / "python"
     if venv_python.exists():
@@ -5735,7 +5749,6 @@ def gate_foundation_mypy_contracts() -> None:
     if mypy_bin:
         candidate_commands.append([mypy_bin])
 
-    selected_cmd: list[str] | None = None
     for base_cmd in candidate_commands:
         probe = subprocess.run(
             [*base_cmd, "--version"],
@@ -5745,18 +5758,38 @@ def gate_foundation_mypy_contracts() -> None:
             check=False,
         )
         if probe.returncode == 0:
-            selected_cmd = base_cmd
-            break
-    if selected_cmd is None:
-        raise GateError("mypy is not available for gate_foundation_mypy_contracts")
+            return base_cmd
+    raise GateError("mypy is not available")
 
-    run_cmd(
-        [
-            *selected_cmd,
-            *IMPLEMENTED_FOUNDATION_MYPY_FILES,
-        ],
+
+def _extract_mypy_error_count(proc: subprocess.CompletedProcess[str]) -> int:
+    output = f"{proc.stdout}\n{proc.stderr}"
+    summary_match = re.search(r"Found\s+(\d+)\s+errors?\s+in\s+\d+\s+files?", output)
+    if summary_match:
+        return int(summary_match.group(1))
+    if proc.returncode == 0:
+        return 0
+    return len(re.findall(r":\s*error:", output))
+
+
+def gate_repo_wide_mypy_baseline() -> None:
+    selected_cmd = _select_mypy_command()
+    proc = run_cmd(
+        [*selected_cmd, *REPO_WIDE_MYPY_PATHS],
         cwd=ROOT,
+        expect_ok=False,
     )
+    error_count = _extract_mypy_error_count(proc)
+    print(
+        "[quality-gates] repo-wide mypy advisory: "
+        f"errors={error_count}, baseline={REPO_WIDE_MYPY_BASELINE_ERRORS}, "
+        f"paths={','.join(REPO_WIDE_MYPY_PATHS)}"
+    )
+    if error_count > REPO_WIDE_MYPY_BASELINE_ERRORS:
+        raise GateError(
+            "Repo-wide mypy baseline regression: "
+            f"{error_count} errors exceeds baseline {REPO_WIDE_MYPY_BASELINE_ERRORS}."
+        )
 
 
 def run_all_gates() -> None:
@@ -5898,6 +5931,7 @@ def run_all_gates() -> None:
         gate_effect_boundaries(temp_repo)
         gate_fallback_with_and_without_index(temp_repo)
         gate_foundation_mypy_contracts()
+        gate_repo_wide_mypy_baseline()
         gate_frontend_fixture(temp_repo_frontend)
         gate_mixed_fixture_describe(temp_repo_mixed)
         gate_describe_quality_gate_matrix(temp_repo)
