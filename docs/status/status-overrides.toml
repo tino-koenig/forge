@@ -1362,6 +1362,13 @@ implemented_on = "2026-04-06"
 notes = "Observability run summary now deduplicates block_reasons by reason_code with stable first-seen ordering."
 
 [[issue]]
+id = "84"
+status = "implemented"
+defined_on = "2026-04-06"
+implemented_on = "2026-04-06"
+notes = "Output contract validator now enforces minimum action_orchestration fields (status, done_reason) for available/fallback states."
+
+[[issue]]
 id = "6"
 status = "implemented"
 defined_on = "2026-04-04"

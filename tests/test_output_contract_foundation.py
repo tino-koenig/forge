@@ -189,12 +189,67 @@ class OutputContractFoundationTests(unittest.TestCase):
 
         diagnostics = validate_contract_schema(contract)
         diagnostic_codes = {item.code for item in diagnostics}
+        self.assertIn("action_orchestration_minimum_fields_missing", diagnostic_codes)
         self.assertIn("invalid_action_orchestration_status", diagnostic_codes)
         self.assertIn("budget_minimum_semantics_missing", diagnostic_codes)
         self.assertIn("runtime_settings_values_required", diagnostic_codes)
         self.assertIn("diagnostics_items_required", diagnostic_codes)
         self.assertIn("policy_violations_items_required", diagnostic_codes)
         self.assertIn("limits_minimum_semantics_missing", diagnostic_codes)
+
+    def test_action_orchestration_minimum_fields_valid_for_available(self) -> None:
+        contract = build_contract_core(
+            capability="query",
+            profile="standard",
+            summary="ok",
+            evidence=(),
+            uncertainty=(),
+            next_step="next",
+            section_inputs={
+                "action_orchestration": SectionInput(payload={"status": "success", "done_reason": "policy_blocked"}),
+            },
+        )
+        diagnostics = validate_contract_schema(contract)
+        diagnostic_codes = {item.code for item in diagnostics}
+        self.assertNotIn("action_orchestration_minimum_fields_missing", diagnostic_codes)
+
+    def test_action_orchestration_minimum_fields_valid_for_fallback(self) -> None:
+        contract = build_contract_core(
+            capability="query",
+            profile="standard",
+            summary="ok",
+            evidence=(),
+            uncertainty=(),
+            next_step="next",
+            section_inputs={
+                "action_orchestration": SectionInput(
+                    payload={"status": "partial", "done_reason": "no_progress"},
+                    status_hint="fallback",
+                    fallback_reason="degraded_orchestration",
+                ),
+            },
+        )
+        diagnostics = validate_contract_schema(contract)
+        diagnostic_codes = {item.code for item in diagnostics}
+        self.assertNotIn("action_orchestration_minimum_fields_missing", diagnostic_codes)
+
+    def test_action_orchestration_minimum_fields_missing_reports_exact_field(self) -> None:
+        contract = build_contract_core(
+            capability="query",
+            profile="standard",
+            summary="ok",
+            evidence=(),
+            uncertainty=(),
+            next_step="next",
+            section_inputs={},
+        ).as_dict()
+        contract["sections"]["action_orchestration"]["status"] = "fallback"
+        contract["sections"]["action_orchestration"]["payload"] = {"status": "partial"}
+
+        diagnostics = validate_contract_schema(contract)
+        missing_diags = [item for item in diagnostics if item.code == "action_orchestration_minimum_fields_missing"]
+        self.assertEqual(len(missing_diags), 1)
+        self.assertIn("done_reason", missing_diags[0].message)
 
     def test_normative_status_and_done_reason_not_reinterpreted(self) -> None:
         contract = build_contract_core(

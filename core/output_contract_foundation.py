@@ -25,6 +25,7 @@ SUPPORTED_VIEWS: tuple[str, ...] = ("compact", "standard", "full")
 NORMATIVE_DECISION_VALUES: tuple[str, ...] = ("continue", "stop")
 NORMATIVE_CONTROL_SIGNALS: tuple[str, ...] = ("none", "replan", "recover", "handoff", "block")
 NORMATIVE_DONE_REASONS: tuple[str, ...] = ("sufficient_evidence", "no_progress", "budget_exhausted", "policy_blocked", "error")
+ACTION_ORCHESTRATION_MINIMUM_FIELDS: tuple[str, ...] = ("status", "done_reason")
 
 
 @dataclass(frozen=True)
@@ -366,6 +367,22 @@ def _validate_action_orchestration_semantics(
         return
     if not isinstance(payload, Mapping):
         return
+
+    if status in ("available", "fallback"):
+        missing = [key for key in ACTION_ORCHESTRATION_MINIMUM_FIELDS if key not in payload]
+        if missing:
+            joined = ", ".join(missing)
+            diagnostics.append(
+                ContractDiagnostic(
+                    code="action_orchestration_minimum_fields_missing",
+                    message=(
+                        "action_orchestration payload is missing required fields for "
+                        f"{status} status: {joined}."
+                    ),
+                    severity="error",
+                    section="action_orchestration",
+                )
+            )
 
     if "status" in payload and not isinstance(payload["status"], str):
         diagnostics.append(
